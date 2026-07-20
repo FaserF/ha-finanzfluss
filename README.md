@@ -1,11 +1,11 @@
 # Finanzfluss Copilot (for Home Assistant)
 
-[![GitHub Release](https://img.shields.io/github/release/fseitz/ha-finanzfluss.svg?style=flat-square)](https://github.com/fseitz/ha-finanzfluss/releases)
-[![Downloads (Current release)](https://img.shields.io/github/downloads/fseitz/ha-finanzfluss/latest/finanzfluss.zip?label=Downloads%20(Current%20release)&style=flat-square)](https://github.com/fseitz/ha-finanzfluss/releases)
-[![License](https://img.shields.io/github/license/fseitz/ha-finanzfluss.svg?style=flat-square)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/release/FaserF/ha-finanzfluss.svg?style=flat-square)](https://github.com/FaserF/ha-finanzfluss/releases)
+[![Downloads (Current release)](https://img.shields.io/github/downloads/FaserF/ha-finanzfluss/latest/finanzfluss.zip?label=Downloads%20(Current%20release)&style=flat-square)](https://github.com/FaserF/ha-finanzfluss/releases)
+[![License](https://img.shields.io/github/license/FaserF/ha-finanzfluss.svg?style=flat-square)](LICENSE)
 [![hacs](https://img.shields.io/badge/HACS-custom-orange.svg?style=flat-square)](https://hacs.xyz)
 [![Add to Home Assistant](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=finanzfluss)
-[![CI Orchestrator](https://github.com/fseitz/ha-finanzfluss/actions/workflows/ci-orchestrator.yml/badge.svg)](https://github.com/fseitz/ha-finanzfluss/actions/workflows/ci-orchestrator.yml)
+[![CI Orchestrator](https://github.com/FaserF/ha-finanzfluss/actions/workflows/ci-orchestrator.yml/badge.svg)](https://github.com/FaserF/ha-finanzfluss/actions/workflows/ci-orchestrator.yml)
 
 A **Home Assistant custom integration** for [Finanzfluss Copilot](https://www.finanzfluss.de/), the German personal finance dashboard. It synchronises your accounts, budgets, cashflow, inflation data and investment portfolio directly into Home Assistant — enabling automations, Lovelace dashboards, and long-term history tracking.
 
@@ -41,8 +41,8 @@ A **Home Assistant custom integration** for [Finanzfluss Copilot](https://www.fi
 
 <div align="center">
 
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor%20on-GitHub-%23EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/fseitz)&nbsp;&nbsp;
-[![PayPal](https://img.shields.io/badge/Donate%20via-PayPal-%2300457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/fseitz)
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor%20on-GitHub-%23EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/FaserF)&nbsp;&nbsp;
+[![PayPal](https://img.shields.io/badge/Donate%20via-PayPal-%2300457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/FaserF)
 
 </div>
 
@@ -54,19 +54,19 @@ A **Home Assistant custom integration** for [Finanzfluss Copilot](https://www.fi
 
 This integration is fully compatible with [HACS](https://hacs.xyz/).
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?repository=fseitz/ha-finanzfluss&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?repository=FaserF/ha-finanzfluss&category=integration)
 
 > [!NOTE]
 > This integration is currently a **custom repository**. Add it manually to HACS:
 
 1. Open HACS → **Integrations** → ⋮ → **Custom repositories**
-2. Add `fseitz/ha-finanzfluss` with category **Integration**
+2. Add `FaserF/ha-finanzfluss` with category **Integration**
 3. Search for **Finanzfluss** and install
 4. Restart Home Assistant
 
 ### Manual Installation
 
-1. Download the latest release from the [Releases page](https://github.com/fseitz/ha-finanzfluss/releases).
+1. Download the latest release from the [Releases page](https://github.com/FaserF/ha-finanzfluss/releases).
 2. Extract the `custom_components/finanzfluss/` folder into your HA `config/custom_components/` directory.
 3. Restart Home Assistant.
 
