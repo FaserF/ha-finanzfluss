@@ -139,7 +139,7 @@ class FinanzflussAccountSensor(FinanzflussBaseEntity):
         account = self._account
         if not account:
             return None
-        return {
+        attrs = {
             "id": account.get("id"),
             "type": account.get("type"),
             "bank_name": account.get("bankName"),
@@ -148,6 +148,42 @@ class FinanzflussAccountSensor(FinanzflussBaseEntity):
             "last_sync": account.get("lastSync"),
             "bank_connection_type": account.get("bankConnectionType"),
         }
+        # Aggregate holdings details inside the depot account entity to avoid entity spam
+        if account.get("type") == "01_depot":
+            investments = self.coordinator.data.get("investments") or {}
+            positions = investments.get("positions", [])
+            depot_positions = []
+            total_gain = 0.0
+            total_purchase = 0.0
+            for p in positions:
+                # Map investments referencing this depot account ID
+                # (some API endpoints link via accountId)
+                if p.get("accountId") == self._account_id or str(
+                    p.get("accountId")
+                ) == str(self._account_id):
+                    depot_positions.append(
+                        {
+                            "name": p.get("name"),
+                            "isin": p.get("isin"),
+                            "quantity": p.get("quantity"),
+                            "market_value": p.get("marketValue"),
+                            "purchase_value": p.get("purchaseValue"),
+                            "gain": p.get("gain"),
+                            "gain_percent": p.get("gainPercent"),
+                        }
+                    )
+                    total_gain += p.get("gain", 0) or 0
+                    total_purchase += p.get("purchaseValue", 0) or 0
+
+            if depot_positions:
+                attrs["positions"] = depot_positions
+                attrs["total_gain"] = total_gain
+                attrs["total_purchase_value"] = total_purchase
+                if total_purchase > 0:
+                    attrs["total_gain_percent"] = round(
+                        (total_gain / total_purchase) * 100, 2
+                    )
+        return attrs
 
 
 class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
@@ -167,20 +203,37 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
         accounts = self.coordinator.data.get("accounts", [])
-        return sum(
+        net_worth = sum(
             account.get("balance", 0)
             for account in accounts
             if not account.get("isHidden")
         )
+        investments = self.coordinator.data.get("investments")
+        if investments:
+            inv_val = investments.get("totalValue") or sum(
+                p.get("marketValue", 0) for p in investments.get("positions", [])
+            )
+            if inv_val:
+                net_worth += inv_val
+        return net_worth
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Add subscription tier details as attributes to reduce entity spam."""
+        """Add subscription tier and investments note as attributes."""
         sub = self.coordinator.data.get("subscription") or {}
-        return {
+        investments = self.coordinator.data.get("investments")
+        attrs: dict[str, Any] = {
             "subscription_tier": sub.get("tier"),
             "subscription_active": sub.get("isActive"),
         }
+        if investments is None:
+            attrs["investments_note"] = "Requires Finanzfluss Plus subscription"
+        else:
+            inv_val = investments.get("totalValue") or sum(
+                p.get("marketValue", 0) for p in investments.get("positions", [])
+            )
+            attrs["investments_total"] = inv_val
+        return attrs
 
 
 class FinanzflussInflationSensor(FinanzflussBaseEntity):
@@ -412,8 +465,11 @@ class FinanzflussMonthlyIncomeSensor(FinanzflussBaseEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Merge categories list into income attributes to save entity count."""
+        """Merge categories and cashflow history into income attributes."""
+        cashflow = self.coordinator.data.get("cashflow") or {}
         return {
+            "period": cashflow.get("period"),
+            "history": cashflow.get("history", []),
             "categories": self.coordinator.data.get("categories", []),
         }
 
@@ -581,6 +637,27 @@ class FinanzflussInvestmentTotalSensor(FinanzflussBaseEntity):
                 p.get("marketValue", 0) for p in investments.get("positions", [])
             )
         return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes."""
+        investments = self.coordinator.data.get("investments")
+        if not investments:
+            return None
+
+        # Calculate totals from positions if not present at root
+        positions = investments.get("positions", [])
+        total_gain = sum(p.get("gain", 0) or 0 for p in positions)
+        total_purchase = sum(p.get("purchaseValue", 0) or 0 for p in positions)
+
+        attrs = {
+            "total_gain": total_gain,
+            "total_purchase_value": total_purchase,
+        }
+        if total_purchase > 0:
+            attrs["total_gain_percent"] = round((total_gain / total_purchase) * 100, 2)
+
+        return attrs
 
 
 class FinanzflussInvestmentPositionSensor(FinanzflussBaseEntity):

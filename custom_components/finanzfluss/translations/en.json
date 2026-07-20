@@ -27,6 +27,32 @@
       "already_configured": "This account is already configured."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Finanzfluss Options",
+        "description": "Adjust the update interval. To change your login credentials, fill in email and password.",
+        "data": {
+          "scan_interval": "Update interval (minutes)",
+          "email": "New email (optional)",
+          "password": "New password (optional)"
+        }
+      },
+      "reauth_mfa": {
+        "title": "Two-Factor Authentication",
+        "description": "A 2FA code is required to confirm the credential change.",
+        "data": {
+          "otp_code": "2FA Code (TOTP)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the server",
+      "invalid_auth": "Invalid email or password",
+      "invalid_otp": "Invalid 2FA code",
+      "unknown": "An unexpected error occurred"
+    }
+  },
   "entity": {
     "sensor": {
       "net_worth": {

@@ -15,6 +15,9 @@ from .const import (
     CONF_WAPI_ACCESS_TOKEN,
     CONF_REFRESH_TOKEN,
     CONF_USER_UUID,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
 )
 from .api import (
     FinanzflussAPI,
@@ -30,6 +33,14 @@ class FinanzflussConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Finanzfluss."""
 
     VERSION = 1
+
+    @staticmethod
+    @config_entries.callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> "FinanzflussOptionsFlow":
+        """Return the options flow handler."""
+        return FinanzflussOptionsFlow(config_entry)
 
     def __init__(self) -> None:
         """Initialize flow."""
@@ -132,4 +143,165 @@ class FinanzflussConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+        )
+
+
+class FinanzflussOptionsFlow(config_entries.OptionsFlow):
+    """Handle options for the Finanzfluss integration."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self._config_entry = config_entry
+        self._new_email: str | None = None
+        self._new_password: str | None = None
+        self._pending_interval: int = DEFAULT_SCAN_INTERVAL
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage integration options (update interval + optional re-auth)."""
+        errors: dict[str, str] = {}
+
+        current_interval_minutes = (
+            self._config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            // 60
+        )
+
+        if user_input is not None:
+            interval_minutes = user_input[CONF_SCAN_INTERVAL]
+            scan_interval_seconds = max(MIN_SCAN_INTERVAL, interval_minutes * 60)
+
+            new_email = user_input.get(CONF_EMAIL, "").strip()
+            new_password = user_input.get(CONF_PASSWORD, "").strip()
+
+            # If credentials were provided, re-authenticate before saving
+            if new_email and new_password:
+                self._new_email = new_email
+                self._new_password = new_password
+                self._pending_interval = scan_interval_seconds
+                return await self.async_step_reauth_mfa(None)
+
+            return self.async_create_entry(
+                title="",
+                data={CONF_SCAN_INTERVAL: scan_interval_seconds},
+            )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_SCAN_INTERVAL,
+                        default=current_interval_minutes,
+                    ): vol.All(int, vol.Range(min=MIN_SCAN_INTERVAL // 60)),
+                    vol.Optional(CONF_EMAIL, default=""): str,
+                    vol.Optional(CONF_PASSWORD, default=""): str,
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_reauth_mfa(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle MFA during credential update in options flow."""
+        errors: dict[str, str] = {}
+
+        session = async_get_clientsession(self.hass)
+        api = FinanzflussAPI(session)
+
+        if user_input is None:
+            # Attempt login without MFA first
+            try:
+                auth_data = await api.login(self._new_email, self._new_password)
+            except OTPRequiredError:
+                # MFA needed – show the OTP form
+                return self.async_show_form(
+                    step_id="reauth_mfa",
+                    data_schema=vol.Schema({vol.Required("otp_code"): str}),
+                    errors=errors,
+                )
+            except InvalidAuthError:
+                errors["base"] = "invalid_auth"
+                return self.async_show_form(
+                    step_id="init",
+                    data_schema=self._init_schema(),
+                    errors=errors,
+                )
+            except CannotConnectError:
+                errors["base"] = "cannot_connect"
+                return self.async_show_form(
+                    step_id="init",
+                    data_schema=self._init_schema(),
+                    errors=errors,
+                )
+            except FinanzflussAPIError:
+                errors["base"] = "unknown"
+                return self.async_show_form(
+                    step_id="init",
+                    data_schema=self._init_schema(),
+                    errors=errors,
+                )
+        else:
+            otp_code = user_input["otp_code"]
+            try:
+                auth_data = await api.login(
+                    self._new_email, self._new_password, otp_code
+                )
+            except InvalidOTPError:
+                errors["base"] = "invalid_otp"
+                return self.async_show_form(
+                    step_id="reauth_mfa",
+                    data_schema=vol.Schema({vol.Required("otp_code"): str}),
+                    errors=errors,
+                )
+            except InvalidAuthError:
+                errors["base"] = "invalid_auth"
+                return self.async_show_form(
+                    step_id="reauth_mfa",
+                    data_schema=vol.Schema({vol.Required("otp_code"): str}),
+                    errors=errors,
+                )
+            except (CannotConnectError, FinanzflussAPIError):
+                errors["base"] = "cannot_connect"
+                return self.async_show_form(
+                    step_id="reauth_mfa",
+                    data_schema=vol.Schema({vol.Required("otp_code"): str}),
+                    errors=errors,
+                )
+
+        # Persist updated credentials into config entry data
+        new_data = {
+            **self._config_entry.data,
+            CONF_EMAIL: self._new_email,
+            CONF_PASSWORD: self._new_password,
+            CONF_FF_ACCESS_TOKEN: auth_data["ffAccessToken"],
+            CONF_WAPI_ACCESS_TOKEN: auth_data["wapiAccessToken"],
+            CONF_REFRESH_TOKEN: auth_data["refreshToken"],
+            CONF_USER_UUID: auth_data["uuid"],
+        }
+        self.hass.config_entries.async_update_entry(
+            self._config_entry, data=new_data, title=self._new_email
+        )
+
+        return self.async_create_entry(
+            title="",
+            data={CONF_SCAN_INTERVAL: self._pending_interval},
+        )
+
+    def _init_schema(self) -> vol.Schema:
+        """Return the init step schema (used when re-showing after error)."""
+        current_interval_minutes = (
+            self._config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            // 60
+        )
+        return vol.Schema(
+            {
+                vol.Required(
+                    CONF_SCAN_INTERVAL,
+                    default=current_interval_minutes,
+                ): vol.All(int, vol.Range(min=MIN_SCAN_INTERVAL // 60)),
+                vol.Optional(CONF_EMAIL, default=""): str,
+                vol.Optional(CONF_PASSWORD, default=""): str,
+            }
         )

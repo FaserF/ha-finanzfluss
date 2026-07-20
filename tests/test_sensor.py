@@ -46,9 +46,18 @@ def _make_coordinator(data: dict) -> MagicMock:
 
 
 class TestNetWorthSensor:
-    def test_native_value(self, sample_coordinator_data):
+    def test_native_value_with_investments(self, sample_coordinator_data):
         coord = _make_coordinator(sample_coordinator_data)
         sensor = FinanzflussNetWorthSensor(coord)
+        # 1500 + 5000 (accounts) + 25000 (investments.totalValue)
+        assert sensor.native_value == 31500.0
+
+    def test_native_value_without_investments(self, sample_coordinator_data):
+        data = dict(sample_coordinator_data)
+        data["investments"] = None  # Plus subscription not available
+        coord = _make_coordinator(data)
+        sensor = FinanzflussNetWorthSensor(coord)
+        # Only cash accounts summed
         assert sensor.native_value == 6500.0  # 1500 + 5000
 
     def test_native_value_excludes_hidden(self, sample_coordinator_data):
@@ -59,7 +68,7 @@ class TestNetWorthSensor:
         ]
         coord = _make_coordinator(data)
         sensor = FinanzflussNetWorthSensor(coord)
-        assert sensor.native_value == 1000.0
+        assert sensor.native_value == 26000.0  # 1000 (visible) + 25000 (investments)
 
     def test_native_value_empty_accounts(self):
         coord = _make_coordinator({"accounts": []})
@@ -70,6 +79,24 @@ class TestNetWorthSensor:
         coord = _make_coordinator({})
         sensor = FinanzflussNetWorthSensor(coord)
         assert sensor.native_value == 0.0
+
+    def test_extra_attrs_investments_note_when_none(self, sample_coordinator_data):
+        data = dict(sample_coordinator_data)
+        data["investments"] = None
+        coord = _make_coordinator(data)
+        sensor = FinanzflussNetWorthSensor(coord)
+        attrs = sensor.extra_state_attributes
+        assert attrs is not None
+        assert "investments_note" in attrs
+
+    def test_extra_attrs_investments_total_when_available(
+        self, sample_coordinator_data
+    ):
+        coord = _make_coordinator(sample_coordinator_data)
+        sensor = FinanzflussNetWorthSensor(coord)
+        attrs = sensor.extra_state_attributes
+        assert attrs is not None
+        assert attrs["investments_total"] == 25000.0
 
 
 # ---------------------------------------------------------------------------

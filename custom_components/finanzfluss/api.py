@@ -140,13 +140,14 @@ class FinanzflussAPI:
             raise CannotConnectError("Failed to fetch inflation") from err
 
     async def get_cashflow_summary(self, ff_token: str, month_str: str) -> dict:
-        """Get cashflow summary."""
+        """Get cashflow summary (all periods with granularity=month)."""
         from .const import API_CASHFLOW
 
         try:
             headers = self._auth_headers(ff_token)
+            # granularity=month returns all monthly periods; we filter to current month in coordinator
             async with self.session.get(
-                f"{API_CASHFLOW}?month={month_str}", headers=headers
+                f"{API_CASHFLOW}?granularity=month", headers=headers
             ) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")

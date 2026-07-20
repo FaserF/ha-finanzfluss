@@ -226,10 +226,14 @@ def mock_api() -> AsyncMock:
         ]
     }
     api.get_cashflow_summary.return_value = {
-        "income": 3500.0,
-        "expenses": 2100.0,
-        "savingsRate": 40.0,
-        "balance": 1400.0,
+        "periods": [
+            {
+                "date": "2024-01-01",
+                "income": 3500.0,
+                "expenses": -2100.0,
+                "savings": 1400.0,
+            },
+        ]
     }
     api.get_transactions.return_value = {
         "totalCount": 42,

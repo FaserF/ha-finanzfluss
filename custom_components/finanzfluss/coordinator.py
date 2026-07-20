@@ -15,6 +15,7 @@ from .api import CannotConnectError, FinanzflussAPI, InvalidAuthError
 from .const import (
     CONF_FF_ACCESS_TOKEN,
     CONF_REFRESH_TOKEN,
+    CONF_SCAN_INTERVAL,
     CONF_WAPI_ACCESS_TOKEN,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -45,7 +46,9 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             LOGGER,
             config_entry=entry,
             name=DOMAIN,
-            update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
+            update_interval=timedelta(
+                seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            ),
         )
 
     async def async_load_cache(self) -> None:
@@ -196,11 +199,42 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         except Exception as err:
             LOGGER.warning("Could not fetch inflation data: %s", err)
 
-        cashflow_data = None
+        cashflow_raw = None
         try:
-            cashflow_data = await self.api.get_cashflow_summary(ff_token, month_str)
+            cashflow_raw = await self.api.get_cashflow_summary(ff_token, month_str)
         except Exception as err:
             LOGGER.warning("Could not fetch cashflow data: %s", err)
+
+        # Parse cashflow: API returns {periods: [{date, income, expenses, savings}]}
+        # Extract current month's period and compute savings rate
+        cashflow_data = None
+        if isinstance(cashflow_raw, dict):
+            periods = cashflow_raw.get("periods", [])
+            if periods:
+                # Find current month period (month_str = "YYYY-MM-01")
+                current = next(
+                    (p for p in periods if p.get("date", "").startswith(month_str[:7])),
+                    periods[-1],  # fallback to latest
+                )
+                income = current.get("income", 0) or 0
+                expenses = current.get("expenses", 0) or 0
+                savings = current.get("savings") or (
+                    income + expenses
+                )  # expenses are negative
+                savings_rate = (
+                    round((savings / income) * 100, 1)
+                    if income and income > 0
+                    else None
+                )
+                cashflow_data = {
+                    "income": income,
+                    "expenses": abs(expenses),  # make positive for display
+                    "balance": income + expenses,
+                    "savings": savings,
+                    "savingsRate": savings_rate,
+                    "period": current.get("date"),
+                    "history": periods[-12:],  # last 12 months for attributes
+                }
 
         transactions_data = None
         try:
@@ -211,6 +245,9 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         investments_data = None
         try:
             investments_data = await self.api.get_investments(ff_token, wapi_token)
+        except InvalidAuthError:
+            # Re-raise so the coordinator can refresh tokens and retry
+            raise
         except Exception as err:
             LOGGER.warning("Could not fetch investments data: %s", err)
 

@@ -27,6 +27,32 @@
       "already_configured": "Dieses Konto ist bereits konfiguriert."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Finanzfluss Einstellungen",
+        "description": "Passe das Aktualisierungsintervall an. Um die Zugangsdaten zu ändern, E-Mail und Passwort ausfüllen.",
+        "data": {
+          "scan_interval": "Aktualisierungsintervall (Minuten)",
+          "email": "Neue E-Mail (optional)",
+          "password": "Neues Passwort (optional)"
+        }
+      },
+      "reauth_mfa": {
+        "title": "Zwei-Faktor-Authentifizierung",
+        "description": "Ein 2FA-Code wird benötigt, um die Zugangsdatenänderung zu bestätigen.",
+        "data": {
+          "otp_code": "2FA-Code (TOTP)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Server fehlgeschlagen",
+      "invalid_auth": "Ungültige E-Mail oder ungültiges Passwort",
+      "invalid_otp": "Ungültiger 2FA-Code",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten"
+    }
+  },
   "entity": {
     "sensor": {
       "net_worth": {
