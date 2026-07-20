@@ -1,0 +1,7 @@
+{
+  "name": "Finanzfluss Copilot",
+  "render_readme": true,
+  "zip_release": true,
+  "filename": "finanzfluss.zip",
+  "country": ["DE"]
+}

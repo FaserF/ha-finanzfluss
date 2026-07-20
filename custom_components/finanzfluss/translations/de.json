@@ -1,0 +1,73 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mit Finanzfluss verbinden",
+        "description": "Bitte gib deine Finanzfluss-Zugangsdaten ein. Dein Passwort wird verschlüsselt gespeichert.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
+      },
+      "mfa": {
+        "title": "Zwei-Faktor-Authentifizierung",
+        "description": "Ein 2FA-Code wird benötigt. Bitte gib den Code aus deiner Authenticator-App ein.",
+        "data": {
+          "otp_code": "2FA-Code (TOTP)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Server fehlgeschlagen",
+      "invalid_auth": "Ungültige E-Mail oder ungültiges Passwort",
+      "invalid_otp": "Ungültiger 2FA-Code",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten"
+    },
+    "abort": {
+      "already_configured": "Dieses Konto ist bereits konfiguriert."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "net_worth": {
+        "name": "Gesamtvermögen"
+      },
+      "inflation_rate": {
+        "name": "Inflationsrate"
+      },
+      "budget_total": {
+        "name": "Budget-Gesamtlimit"
+      },
+      "budget_spent": {
+        "name": "Budget ausgegeben"
+      },
+      "budget_remaining": {
+        "name": "Restbudget"
+      },
+      "monthly_income": {
+        "name": "Monatliche Einnahmen"
+      },
+      "monthly_expenses": {
+        "name": "Monatliche Ausgaben"
+      },
+      "monthly_balance": {
+        "name": "Monatliche Bilanz"
+      },
+      "savings_rate": {
+        "name": "Monatliche Sparquote"
+      },
+      "transaction_count": {
+        "name": "Transaktionsanzahl"
+      },
+      "last_transaction": {
+        "name": "Letzte Transaktion"
+      },
+      "investment_total": {
+        "name": "Gesamtinvestitionen"
+      },
+      "subscription": {
+        "name": "Abonnement"
+      }
+    }
+  }
+}

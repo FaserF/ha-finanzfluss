@@ -1,0 +1,73 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Finanzfluss",
+        "description": "Please enter your Finanzfluss credentials. Your password will be encrypted.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "mfa": {
+        "title": "Two-Factor Authentication",
+        "description": "A 2FA code is required. Please enter the code from your authenticator app.",
+        "data": {
+          "otp_code": "2FA Code (TOTP)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the server",
+      "invalid_auth": "Invalid email or password",
+      "invalid_otp": "Invalid 2FA code",
+      "unknown": "An unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "This account is already configured."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "net_worth": {
+        "name": "Net Worth"
+      },
+      "inflation_rate": {
+        "name": "Inflation Rate"
+      },
+      "budget_total": {
+        "name": "Budget Total Limit"
+      },
+      "budget_spent": {
+        "name": "Budget Total Spent"
+      },
+      "budget_remaining": {
+        "name": "Budget Remaining"
+      },
+      "monthly_income": {
+        "name": "Monthly Income"
+      },
+      "monthly_expenses": {
+        "name": "Monthly Expenses"
+      },
+      "monthly_balance": {
+        "name": "Monthly Balance"
+      },
+      "savings_rate": {
+        "name": "Monthly Savings Rate"
+      },
+      "transaction_count": {
+        "name": "Transaction Count"
+      },
+      "last_transaction": {
+        "name": "Last Transaction"
+      },
+      "investment_total": {
+        "name": "Total Investments"
+      },
+      "subscription": {
+        "name": "Subscription"
+      }
+    }
+  }
+}
