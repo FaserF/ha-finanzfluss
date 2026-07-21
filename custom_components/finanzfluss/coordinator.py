@@ -285,7 +285,6 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         estimated_investment_total = 0.0
         for tx in all_tx_list:
             purpose = str(tx.get("purpose", "")).lower()
-            name = str(tx.get("name", "")).lower()
             amt = tx.get("amount", 0) or 0
             if (
                 "wp.abrechnung" in purpose
