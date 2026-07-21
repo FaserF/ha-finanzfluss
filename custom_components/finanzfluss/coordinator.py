@@ -293,7 +293,6 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             ):
                 estimated_investment_total -= amt
 
-
         return {
             "accounts": accounts_data.get("accounts", []),
             "budgets": budgets_data,
