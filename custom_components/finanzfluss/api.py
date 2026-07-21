@@ -1,5 +1,7 @@
 """API client for Finanzfluss."""
 
+import re
+from typing import Any, cast
 import aiohttp
 
 
@@ -23,6 +25,14 @@ class InvalidOTPError(FinanzflussAPIError):
     """Raised when OTP is invalid."""
 
 
+def _sanitize_error(err: Exception) -> str:
+    """Sanitize sensitive tokens from error messages."""
+    msg = str(err)
+    msg = re.sub(r"wapiAccessToken=[^&\s'\"]+", "wapiAccessToken=REDACTED", msg)
+    msg = re.sub(r"Bearer\s+[A-Za-z0-9._\-]+", "Bearer REDACTED", msg)
+    return msg
+
+
 class FinanzflussAPI:
     """API client for Finanzfluss."""
 
@@ -44,7 +54,7 @@ class FinanzflussAPI:
 
     async def login(
         self, email: str, password: str, otp_code: str | None = None
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Login to Finanzfluss."""
         from .const import API_LOGIN
 
@@ -55,7 +65,7 @@ class FinanzflussAPI:
         try:
             async with self.session.post(API_LOGIN, json=payload) as resp:
                 if resp.status == 201:
-                    return await resp.json()
+                    return cast(dict[str, Any], await resp.json())
 
                 # Check body for specific error codes like 40103 (OTP required) or 40104 (Invalid OTP)
                 try:
@@ -72,11 +82,11 @@ class FinanzflussAPI:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Invalid credentials")
                 resp.raise_for_status()
-                return await resp.json()
+                return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
             raise CannotConnectError("Failed to connect to API") from err
 
-    async def refresh_tokens(self, refresh_token: str) -> dict:
+    async def refresh_tokens(self, refresh_token: str) -> dict[str, Any]:
         """Refresh auth tokens."""
         from .const import API_REFRESH
 
@@ -85,12 +95,12 @@ class FinanzflussAPI:
                 f"{API_REFRESH}?refresh_token={refresh_token}"
             ) as resp:
                 if resp.status == 201:
-                    return await resp.json()
+                    return cast(dict[str, Any], await resp.json())
                 raise InvalidAuthError("Failed to refresh token")
         except aiohttp.ClientError as err:
             raise CannotConnectError("Failed to connect to API") from err
 
-    async def get_accounts(self, ff_token: str, wapi_token: str) -> dict:
+    async def get_accounts(self, ff_token: str, wapi_token: str) -> dict[str, Any]:
         """Get accounts."""
         from .const import API_ACCOUNTS
 
@@ -100,11 +110,13 @@ class FinanzflussAPI:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
                 resp.raise_for_status()
-                return await resp.json()
+                return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
-            raise CannotConnectError("Failed to fetch accounts") from err
+            raise CannotConnectError(
+                f"Failed to fetch accounts: {_sanitize_error(err)}"
+            ) from err
 
-    async def get_budgets(self, ff_token: str, month_str: str) -> dict:
+    async def get_budgets(self, ff_token: str, month_str: str) -> dict[str, Any]:
         """Get budgets."""
         from .const import API_BUDGETS
 
@@ -116,13 +128,15 @@ class FinanzflussAPI:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
                 resp.raise_for_status()
-                return await resp.json()
+                return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
-            raise CannotConnectError("Failed to fetch budgets") from err
+            raise CannotConnectError(
+                f"Failed to fetch budgets: {_sanitize_error(err)}"
+            ) from err
 
     async def get_inflation(
         self, ff_token: str, start_date: str, end_date: str
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Get inflation data."""
         from .const import API_INFLATION
 
@@ -135,11 +149,13 @@ class FinanzflussAPI:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
                 resp.raise_for_status()
-                return await resp.json()
+                return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
-            raise CannotConnectError("Failed to fetch inflation") from err
+            raise CannotConnectError(
+                f"Failed to fetch inflation: {_sanitize_error(err)}"
+            ) from err
 
-    async def get_cashflow_summary(self, ff_token: str, month_str: str) -> dict:
+    async def get_cashflow_summary(self, ff_token: str, month_str: str) -> dict[str, Any]:
         """Get cashflow summary (all periods with granularity=month)."""
         from .const import API_CASHFLOW
 
@@ -152,29 +168,59 @@ class FinanzflussAPI:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
                 resp.raise_for_status()
-                return await resp.json()
+                return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
-            raise CannotConnectError("Failed to fetch cashflow summary") from err
+            raise CannotConnectError(
+                f"Failed to fetch cashflow summary: {_sanitize_error(err)}"
+            ) from err
 
     async def get_transactions(
         self, ff_token: str, page: int = 0, size: int = 50
-    ) -> dict:
-        """Get transactions."""
+    ) -> dict[str, Any]:
+        """Get transactions for a specific page."""
         from .const import API_TRANSACTIONS
 
         try:
             headers = self._auth_headers(ff_token)
-            async with self.session.get(
-                f"{API_TRANSACTIONS}?page={page}&size={size}", headers=headers
-            ) as resp:
+            url = f"{API_TRANSACTIONS}?page={page}&size={size}"
+            async with self.session.get(url, headers=headers) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
                 resp.raise_for_status()
-                return await resp.json()
+                return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
-            raise CannotConnectError("Failed to fetch transactions") from err
+            raise CannotConnectError(
+                f"Failed to fetch transactions: {_sanitize_error(err)}"
+            ) from err
 
-    async def get_investments(self, ff_token: str, wapi_token: str) -> dict:
+    async def get_all_transactions(
+        self, ff_token: str, max_pages: int = 50
+    ) -> list[dict[str, Any]]:
+        """Get all historical transactions across all pages."""
+        all_txs: list[dict[str, Any]] = []
+        page = 0
+        size = 50
+        while page < max_pages:
+            try:
+                res = await self.get_transactions(
+                    ff_token, page=page, size=size
+                )
+                txs = res.get("transactions", [])
+                if not txs:
+                    break
+                all_txs.extend(txs)
+                total_count = res.get("totalCount", 0)
+                if len(all_txs) >= total_count or len(txs) < size:
+                    break
+                page += 1
+            except Exception as err:
+                from .const import LOGGER
+
+                LOGGER.warning("Error fetching transaction page %d: %s", page, err)
+                break
+        return all_txs
+
+    async def get_investments(self, ff_token: str, wapi_token: str) -> dict[str, Any]:
         """Get investments."""
         from .const import API_INVESTMENTS
 
@@ -183,26 +229,35 @@ class FinanzflussAPI:
             async with self.session.get(API_INVESTMENTS, headers=headers) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
+                if resp.status == 402:
+                    # Investment breakdown requires Finanzfluss Plus subscription
+                    return {}
                 resp.raise_for_status()
-                return await resp.json()
+                return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
-            raise CannotConnectError("Failed to fetch investments") from err
+            raise CannotConnectError(
+                f"Failed to fetch investments: {_sanitize_error(err)}"
+            ) from err
 
-    async def get_exemption_orders(self, ff_token: str) -> list:
+    async def get_exemption_orders(
+        self, ff_token: str, wapi_token: str | None = None
+    ) -> list[Any]:
         """Get exemption orders."""
         from .const import API_EXEMPTION_ORDERS
 
         try:
-            headers = self._auth_headers(ff_token)
+            headers = self._auth_headers(ff_token, wapi_token)
             async with self.session.get(API_EXEMPTION_ORDERS, headers=headers) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
                 resp.raise_for_status()
-                return await resp.json()
+                return cast(list[Any], await resp.json())
         except aiohttp.ClientError as err:
-            raise CannotConnectError("Failed to fetch exemption orders") from err
+            raise CannotConnectError(
+                f"Failed to fetch exemption orders: {_sanitize_error(err)}"
+            ) from err
 
-    async def get_subscription(self, ff_token: str) -> dict:
+    async def get_subscription(self, ff_token: str) -> dict[str, Any]:
         """Get subscription details."""
         from .const import API_SUBSCRIPTION
 
@@ -212,20 +267,26 @@ class FinanzflussAPI:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
                 resp.raise_for_status()
-                return await resp.json()
+                return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
-            raise CannotConnectError("Failed to fetch subscription") from err
+            raise CannotConnectError(
+                f"Failed to fetch subscription: {_sanitize_error(err)}"
+            ) from err
 
-    async def get_categories(self, ff_token: str) -> list:
+    async def get_categories(
+        self, ff_token: str, wapi_token: str | None = None
+    ) -> list[Any]:
         """Get categories."""
         from .const import API_CATEGORIES
 
         try:
-            headers = self._auth_headers(ff_token)
+            headers = self._auth_headers(ff_token, wapi_token)
             async with self.session.get(API_CATEGORIES, headers=headers) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
                 resp.raise_for_status()
-                return await resp.json()
+                return cast(list[Any], await resp.json())
         except aiohttp.ClientError as err:
-            raise CannotConnectError("Failed to fetch categories") from err
+            raise CannotConnectError(
+                f"Failed to fetch categories: {_sanitize_error(err)}"
+            ) from err

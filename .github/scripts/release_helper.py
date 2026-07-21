@@ -16,7 +16,7 @@ def main():
 
     release_type = os.environ.get("RELEASE_TYPE", "beta")
     bump_level = os.environ.get("BUMP_LEVEL", "patch")
-    repo = os.environ.get("REPO", "faserf/ha-openwrt").lower()
+    repo = os.environ.get("REPO", "faserf/ha-finanzfluss").lower()
 
     # 1. Dry run get next version
     # Run version_manager.py bump and then restore files

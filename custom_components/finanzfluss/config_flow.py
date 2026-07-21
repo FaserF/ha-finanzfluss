@@ -4,7 +4,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
@@ -49,13 +49,13 @@ class FinanzflussConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle the initial step."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            email = user_input[CONF_EMAIL]
-            password = user_input[CONF_PASSWORD]
+            email: str = user_input[CONF_EMAIL]
+            password: str = user_input[CONF_PASSWORD]
 
             # Check if already configured
             await self.async_set_unique_id(email.lower())
@@ -103,7 +103,7 @@ class FinanzflussConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_mfa(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle MFA step."""
         errors: dict[str, str] = {}
 
@@ -111,9 +111,11 @@ class FinanzflussConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             otp_code = user_input["otp_code"]
             session = async_get_clientsession(self.hass)
             api = FinanzflussAPI(session)
+            email = self._email or ""
+            password = self._password or ""
 
             try:
-                auth_data = await api.login(self._email, self._password, otp_code)
+                auth_data = await api.login(email, password, otp_code)
             except InvalidOTPError:
                 errors["base"] = "invalid_otp"
             except InvalidAuthError:
@@ -124,10 +126,10 @@ class FinanzflussConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
             else:
                 return self.async_create_entry(
-                    title=self._email,
+                    title=email,
                     data={
-                        CONF_EMAIL: self._email,
-                        CONF_PASSWORD: self._password,
+                        CONF_EMAIL: email,
+                        CONF_PASSWORD: password,
                         CONF_FF_ACCESS_TOKEN: auth_data["ffAccessToken"],
                         CONF_WAPI_ACCESS_TOKEN: auth_data["wapiAccessToken"],
                         CONF_REFRESH_TOKEN: auth_data["refreshToken"],
@@ -158,7 +160,7 @@ class FinanzflussOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Manage integration options (update interval + optional re-auth)."""
         errors: dict[str, str] = {}
 
@@ -203,17 +205,19 @@ class FinanzflussOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_reauth_mfa(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle MFA during credential update in options flow."""
         errors: dict[str, str] = {}
 
         session = async_get_clientsession(self.hass)
         api = FinanzflussAPI(session)
+        new_email = self._new_email or ""
+        new_password = self._new_password or ""
 
         if user_input is None:
             # Attempt login without MFA first
             try:
-                auth_data = await api.login(self._new_email, self._new_password)
+                auth_data = await api.login(new_email, new_password)
             except OTPRequiredError:
                 # MFA needed – show the OTP form
                 return self.async_show_form(
@@ -245,9 +249,7 @@ class FinanzflussOptionsFlow(config_entries.OptionsFlow):
         else:
             otp_code = user_input["otp_code"]
             try:
-                auth_data = await api.login(
-                    self._new_email, self._new_password, otp_code
-                )
+                auth_data = await api.login(new_email, new_password, otp_code)
             except InvalidOTPError:
                 errors["base"] = "invalid_otp"
                 return self.async_show_form(
@@ -273,15 +275,15 @@ class FinanzflussOptionsFlow(config_entries.OptionsFlow):
         # Persist updated credentials into config entry data
         new_data = {
             **self._config_entry.data,
-            CONF_EMAIL: self._new_email,
-            CONF_PASSWORD: self._new_password,
+            CONF_EMAIL: new_email,
+            CONF_PASSWORD: new_password,
             CONF_FF_ACCESS_TOKEN: auth_data["ffAccessToken"],
             CONF_WAPI_ACCESS_TOKEN: auth_data["wapiAccessToken"],
             CONF_REFRESH_TOKEN: auth_data["refreshToken"],
             CONF_USER_UUID: auth_data["uuid"],
         }
         self.hass.config_entries.async_update_entry(
-            self._config_entry, data=new_data, title=self._new_email
+            self._config_entry, data=new_data, title=new_email
         )
 
         return self.async_create_entry(

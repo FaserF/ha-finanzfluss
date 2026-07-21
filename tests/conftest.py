@@ -15,7 +15,7 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry  # type: ignore[import-untyped]
 
 from custom_components.finanzfluss.const import (
     CONF_EMAIL,
@@ -29,6 +29,17 @@ from custom_components.finanzfluss.const import (
 # ---------------------------------------------------------------------------
 # Sample data
 # ---------------------------------------------------------------------------
+
+
+import pytest_socket
+
+pytest_socket.enable_socket()
+
+
+@pytest.fixture(autouse=True)
+def enable_socket_for_tests():
+    """Enable socket for asyncio internal self-pipe on Windows."""
+    pytest_socket.enable_socket()
 
 
 @pytest.fixture(autouse=True)

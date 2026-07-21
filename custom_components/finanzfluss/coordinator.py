@@ -37,7 +37,9 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         self._last_success: datetime | None = None
 
         # HA persistent storage for restart-resistance
-        self.store = storage.Store(hass, 1, f"{DOMAIN}_coordinator_state")
+        self.store: storage.Store = storage.Store(
+            hass, 1, f"{DOMAIN}_coordinator_state"
+        )
 
         # Explicitly assign config_entry to the hass data update coordinator lookup table if available
         # to pass context verification checks
@@ -58,35 +60,30 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             if "last_success" in cache:
                 try:
                     self._last_success = dt_util.parse_datetime(cache["last_success"])
-                except (ValueError, TypeError):
-                    self._last_success = None
+                except Exception:
+                    LOGGER.warning("Could not parse cached last_success date")
 
     async def _async_update_data(self) -> dict:
-        """Fetch data from Finanzfluss API with jitter, locking, and backoff."""
-        # 1. Backoff guard
-        if self._backoff_until and dt_util.now() < self._backoff_until:
-            LOGGER.debug(
-                "Skipping update – backoff active until %s",
+        """Fetch data from Finanzfluss API."""
+        now = dt_util.now()
+
+        # 1. Backoff Guard
+        if self._backoff_until and now < self._backoff_until:
+            LOGGER.warning(
+                "In backoff period until %s due to API rate limiting / failures.",
                 self._backoff_until,
             )
             if self.data:
+                LOGGER.info("Returning cached coordinator data during backoff.")
                 return self.data
-            raise UpdateFailed(f"Rate limited/Backing off until {self._backoff_until}")
-
-        # 2. Restart resistance: Skip if last success was extremely recent
-        if self._last_success is not None:
-            time_since = dt_util.now() - self._last_success
-            effective_interval = self.update_interval or timedelta(
-                seconds=DEFAULT_SCAN_INTERVAL
+            raise UpdateFailed(
+                f"Rate limited. Waiting until {self._backoff_until.isoformat()} before retrying."
             )
-            # If we restarted and want to update, but did so within interval minus 1 minute
-            if time_since < (effective_interval - timedelta(minutes=1)):
-                LOGGER.debug(
-                    "Skipping update: last success was %d seconds ago (recent)",
-                    time_since.total_seconds(),
-                )
-                if self.data:
-                    return self.data
+
+        # 2. Check config entry
+        entry = self.config_entry
+        if not entry:
+            raise UpdateFailed("Config entry is missing")
 
         # 3. Domain-wide Lock to serialize concurrent requests (e.g. if multiple entries existed)
         domain_data = self.hass.data.setdefault(DOMAIN, {})
@@ -99,9 +96,9 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
                 LOGGER.debug("Waiting %.1f s jitter before API request", jitter)
                 await asyncio.sleep(jitter)
 
-            ff_token = self.config_entry.data.get(CONF_FF_ACCESS_TOKEN)
-            wapi_token = self.config_entry.data.get(CONF_WAPI_ACCESS_TOKEN)
-            refresh_token = self.config_entry.data.get(CONF_REFRESH_TOKEN)
+            ff_token: str = entry.data.get(CONF_FF_ACCESS_TOKEN, "")
+            wapi_token: str = entry.data.get(CONF_WAPI_ACCESS_TOKEN, "")
+            refresh_token: str = entry.data.get(CONF_REFRESH_TOKEN, "")
 
             try:
                 data = await self._fetch_all_data(ff_token, wapi_token)
@@ -121,13 +118,11 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
                     auth_data = await self.api.refresh_tokens(refresh_token)
 
                     # Update config entry with new tokens
-                    new_data = {**self.config_entry.data}
+                    new_data = {**entry.data}
                     new_data[CONF_FF_ACCESS_TOKEN] = auth_data["ffAccessToken"]
                     new_data[CONF_WAPI_ACCESS_TOKEN] = auth_data["wapiAccessToken"]
                     new_data[CONF_REFRESH_TOKEN] = auth_data["refreshToken"]
-                    self.hass.config_entries.async_update_entry(
-                        self.config_entry, data=new_data
-                    )
+                    self.hass.config_entries.async_update_entry(entry, data=new_data)
 
                     # Retry fetching with new tokens
                     data = await self._fetch_all_data(
@@ -237,10 +232,16 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
                 }
 
         transactions_data = None
+        all_tx_list: list[dict[str, Any]] = []
         try:
-            transactions_data = await self.api.get_transactions(ff_token)
+            all_tx_list = await self.api.get_all_transactions(ff_token)
+            transactions_data = {
+                "totalCount": len(all_tx_list),
+                "transactions": all_tx_list,
+            }
         except Exception as err:
             LOGGER.warning("Could not fetch transactions data: %s", err)
+
 
         investments_data = None
         try:
@@ -253,7 +254,9 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
 
         exemption_data = None
         try:
-            exemption_data = await self.api.get_exemption_orders(ff_token)
+            exemption_data = await self.api.get_exemption_orders(
+                ff_token, wapi_token=wapi_token
+            )
         except Exception as err:
             LOGGER.warning("Could not fetch exemption orders data: %s", err)
 
@@ -265,9 +268,23 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
 
         categories_data = None
         try:
-            categories_data = await self.api.get_categories(ff_token)
+            categories_data = await self.api.get_categories(
+                ff_token, wapi_token=wapi_token
+            )
         except Exception as err:
             LOGGER.warning("Could not fetch categories data: %s", err)
+
+        # Estimate investment deposits from entire historical transaction history when native investments API is unavailable
+        estimated_investment_total = 0.0
+        for tx in all_tx_list:
+            purpose = str(tx.get("purpose", "")).lower()
+            name = str(tx.get("name", "")).lower()
+            amt = tx.get("amount", 0) or 0
+            if any(
+                k in purpose or k in name
+                for k in ("depot", "wertpapier", "etf", "sparen", "aktie", "trade republic", "scalable")
+            ):
+                estimated_investment_total += abs(amt)
 
         return {
             "accounts": accounts_data.get("accounts", []),
@@ -278,9 +295,12 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             "cashflow": cashflow_data,
             "transactions": transactions_data,
             "investments": investments_data,
+            "estimated_investment_total": estimated_investment_total,
             "exemption_orders": exemption_data
             if isinstance(exemption_data, list)
             else [],
             "subscription": subscription_data,
             "categories": categories_data if isinstance(categories_data, list) else [],
         }
+
+

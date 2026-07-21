@@ -54,7 +54,7 @@ A **Home Assistant custom integration** for [Finanzfluss Copilot](https://www.fi
 
 This integration is fully compatible with [HACS](https://hacs.xyz/).
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?repository=FaserF/ha-finanzfluss&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=FaserF&repository=ha-finanzfluss&category=integration)
 
 > [!NOTE]
 > This integration is currently a **custom repository**. Add it manually to HACS:
@@ -186,7 +186,7 @@ All entities belong to a single **Finanzfluss Copilot** device.
 
 ---
 
-#### `sensor.finanzfluss_investment_total` — Gesamtinvestitionen *(Plus required)*
+#### `sensor.finanzfluss_investment_total` — Total investments *(Plus required)*
 
 | | |
 |---|---|
@@ -466,17 +466,20 @@ Exports coordinator state with sensitive fields (tokens, passwords) redacted for
 
 ## ❓ Troubleshooting & FAQ
 
-### Depot accounts show 0.00 EUR?
+### How are depot values and Net Worth calculated?
 
-The Finanzfluss API returns `balance: 0` for all depot accounts from the standard accounts endpoint. Real market values are gated behind a **Plus subscription** and fetched from the investments endpoint. The `investments_note` attribute on the Net Worth sensor confirms whether Plus is active.
+The Finanzfluss Backend API handles depot accounts as follows:
+- **With Finanzfluss Plus**: The integration operates **100% natively**, fetching live depot market values, stock/ETF positions, cost basis, and unrealised returns directly from `/v2/investments/breakdown`.
+- **Without Finanzfluss Plus**: Since the backend restricts investment breakdown endpoints (`HTTP 402 Payment Required`), the integration automatically activates a **seamless fallback calculation**. It analyzes transaction history for security purchases, savings plans, and transfers, aggregating an estimated investment total and adding it to your `Net Worth` sensor automatically without requiring manual user input.
+
+### Are API Tokens logged in Home Assistant errors?
+
+No. Sensitive tokens (`wapiAccessToken` and `Bearer` authorization headers) are automatically sanitized and replaced with `REDACTED` before any error messages are written to Home Assistant logs.
 
 ### Cashflow / budget sensors show "Unknown"?
 
 Requires at least one month of transaction data in Finanzfluss Copilot. Check the Home Assistant logs for `WARNING` messages from the `finanzfluss` component.
 
-### Net worth doesn't include investments?
-
-Depot values require a **Plus subscription**. Without Plus the `sensor.finanzfluss_investment_total` sensor will be unavailable and the net worth will only reflect cash account balances.
 
 ### Sensors stop updating / show "Unavailable"?
 

@@ -1,8 +1,8 @@
-"""Sensor platform for Finanzfluss."""
+"""Sensor platform for Finanzfluss integration."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -21,44 +21,57 @@ from .coordinator import FinanzflussDataUpdateCoordinator
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Finanzfluss sensors based on a config entry."""
-    coordinator: FinanzflussDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+    """Set up Finanzfluss sensor entities based on a config entry."""
+    coordinator: FinanzflussDataUpdateCoordinator = hass.data[DOMAIN][
+        config_entry.entry_id
+    ]
 
     entities: list[SensorEntity] = [
         FinanzflussNetWorthSensor(coordinator),
-        FinanzflussInflationSensor(coordinator),
-        FinanzflussBudgetTotalSensor(coordinator),
-        FinanzflussBudgetSpentSensor(coordinator),
-        FinanzflussBudgetRemainingTotalSensor(coordinator),
         FinanzflussMonthlyIncomeSensor(coordinator),
         FinanzflussMonthlyExpensesSensor(coordinator),
         FinanzflussMonthlyBalanceSensor(coordinator),
         FinanzflussMonthlySavingsRateSensor(coordinator),
         FinanzflussTransactionCountSensor(coordinator),
         FinanzflussLastTransactionSensor(coordinator),
-        FinanzflussInvestmentTotalSensor(coordinator),
+        FinanzflussInflationSensor(coordinator),
+        FinanzflussBudgetTotalSensor(coordinator),
+        FinanzflussBudgetSpentSensor(coordinator),
+        FinanzflussBudgetRemainingTotalSensor(coordinator),
         FinanzflussSubscriptionSensor(coordinator),
     ]
 
+    # Dynamically create sensors for accounts
     accounts = coordinator.data.get("accounts", [])
     for account in accounts:
         entities.append(FinanzflussAccountSensor(coordinator, account["id"]))
 
-    budgets = coordinator.data.get("budgets", {}).get("buckets", [])
-    for bucket in budgets:
+    # Dynamically create sensors for budget buckets
+    buckets = coordinator.data.get("budgets", {}).get("buckets", [])
+    for bucket in buckets:
         entities.append(FinanzflussBudgetBucketSensor(coordinator, bucket["id"]))
         entities.append(
             FinanzflussBudgetBucketRemainingSensor(coordinator, bucket["id"])
         )
 
-    investments = (coordinator.data.get("investments") or {}).get("positions", [])
-    for position in investments:
-        entities.append(
-            FinanzflussInvestmentPositionSensor(coordinator, position["id"])
-        )
+    # Check for Finanzfluss Plus tier (or fallback if investment positions exist)
+    sub = coordinator.data.get("subscription") or {}
+    has_plus = (
+        sub.get("tier") == "plus"
+        or sub.get("isActive") is True
+        or bool((coordinator.data.get("investments") or {}).get("positions"))
+    )
+
+    if has_plus:
+        entities.append(FinanzflussInvestmentTotalSensor(coordinator))
+        investments = (coordinator.data.get("investments") or {}).get("positions", [])
+        for position in investments:
+            entities.append(
+                FinanzflussInvestmentPositionSensor(coordinator, position["id"])
+            )
 
     exemption_orders = coordinator.data.get("exemption_orders", [])
     for order in exemption_orders:
@@ -79,10 +92,14 @@ class FinanzflussBaseEntity(
     _attr_has_entity_name = True
 
     def __init__(
-        self, coordinator: FinanzflussDataUpdateCoordinator, entry_id: str
+        self, coordinator: FinanzflussDataUpdateCoordinator, entry_id: str | None = None
     ) -> None:
         """Initialize the base entity."""
         super().__init__(coordinator)
+        if entry_id is None:
+            entry_id = (
+                coordinator.config_entry.entry_id if coordinator.config_entry else ""
+            )
         self._entry_id = entry_id
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry_id)},
@@ -100,17 +117,17 @@ class FinanzflussAccountSensor(FinanzflussBaseEntity):
         self, coordinator: FinanzflussDataUpdateCoordinator, account_id: int
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, coordinator.config_entry.entry_id)
+        super().__init__(coordinator)
         self._account_id = account_id
         self._attr_unique_id = f"finanzfluss_account_{account_id}"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
 
     @property
-    def _account(self) -> dict | None:
+    def _account(self) -> dict[str, Any] | None:
         for account in self.coordinator.data.get("accounts", []):
             if account["id"] == self._account_id:
-                return account
+                return cast(dict[str, Any], account)
         return None
 
     @property
@@ -125,7 +142,19 @@ class FinanzflussAccountSensor(FinanzflussBaseEntity):
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
         account = self._account
-        return account.get("balance") if account else None
+        if not account:
+            return None
+        val = account.get("balance")
+        if (val is None or val == 0) and account.get("type") == "01_depot":
+            val = (
+                account.get("marketValue")
+                or account.get("portfolioValue")
+                or account.get("totalValue")
+                or account.get("currentValue")
+                or account.get("value")
+                or 0.0
+            )
+        return cast(float | None, val)
 
     @property
     def native_unit_of_measurement(self) -> str | None:
@@ -139,7 +168,7 @@ class FinanzflussAccountSensor(FinanzflussBaseEntity):
         account = self._account
         if not account:
             return None
-        attrs = {
+        attrs: dict[str, Any] = {
             "id": account.get("id"),
             "type": account.get("type"),
             "bank_name": account.get("bankName"),
@@ -191,49 +220,135 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_net_worth_{entry_id}"
         self._attr_translation_key = "net_worth"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
     def native_value(self) -> float | None:
-        """Return the state of the sensor."""
+        """Calculate total net worth: accounts balance + investments totalValue (if not already included in accounts)."""
         accounts = self.coordinator.data.get("accounts", [])
-        net_worth = sum(
-            account.get("balance", 0)
-            for account in accounts
-            if not account.get("isHidden")
-        )
-        investments = self.coordinator.data.get("investments")
-        if investments:
-            inv_val = investments.get("totalValue") or sum(
-                p.get("marketValue", 0) for p in investments.get("positions", [])
+
+        total_accounts = 0.0
+        has_depot_account = False
+
+        for account in accounts:
+            if account.get("isHidden"):
+                continue
+            acc_type = account.get("type")
+            balance = account.get("balance") or 0.0
+
+            if acc_type == "01_depot":
+                has_depot_account = True
+                if balance == 0:
+                    balance = (
+                        account.get("marketValue")
+                        or account.get("portfolioValue")
+                        or account.get("totalValue")
+                        or account.get("currentValue")
+                        or account.get("value")
+                        or 0.0
+                    )
+            total_accounts += balance
+
+        investments_total = 0.0
+        investments_data = self.coordinator.data.get("investments")
+        if investments_data and isinstance(investments_data, dict):
+            investments_total = investments_data.get("totalValue") or sum(
+                p.get("marketValue", 0) for p in investments_data.get("positions", [])
             )
-            if inv_val:
-                net_worth += inv_val
-        return net_worth
+
+        # Check for active Plus subscription
+        sub = self.coordinator.data.get("subscription") or {}
+        has_plus = (
+            sub.get("tier") == "plus"
+            or sub.get("isActive") is True
+            or (investments_data is not None and bool(investments_total))
+        )
+
+        if has_plus:
+            # Native behavior: Add native investments totalValue if provided
+            return float(total_accounts + investments_total)
+
+        # Fallback behavior (No Plus subscription): Add estimated investment transactions sum
+        tx_est = self.coordinator.data.get("estimated_investment_total", 0.0)
+        return float(total_accounts + tx_est)
+
+
+
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Add subscription tier and investments note as attributes."""
-        sub = self.coordinator.data.get("subscription") or {}
-        investments = self.coordinator.data.get("investments")
-        attrs: dict[str, Any] = {
-            "subscription_tier": sub.get("tier"),
-            "subscription_active": sub.get("isActive"),
-        }
-        if investments is None:
-            attrs["investments_note"] = "Requires Finanzfluss Plus subscription"
-        else:
-            inv_val = investments.get("totalValue") or sum(
-                p.get("marketValue", 0) for p in investments.get("positions", [])
+        """Return rich breakdown and analytics attributes."""
+        accounts = self.coordinator.data.get("accounts", [])
+        investments_data = self.coordinator.data.get("investments")
+        transactions_data = self.coordinator.data.get("transactions") or {}
+
+        cash_total = sum(
+            a.get("balance", 0) or 0
+            for a in accounts
+            if not a.get("isHidden") and a.get("type") != "01_depot"
+        )
+
+        inv_total = 0.0
+        if investments_data and isinstance(investments_data, dict):
+            inv_total = investments_data.get("totalValue") or sum(
+                p.get("marketValue", 0) for p in investments_data.get("positions", [])
             )
-            attrs["investments_total"] = inv_val
+        if inv_total == 0:
+            inv_total = self.coordinator.data.get("estimated_investment_total", 0.0)
+
+        # Analyze transactions for dividends, interest, and gains
+        dividends_total = 0.0
+        interest_total = 0.0
+        realized_gains = 0.0
+
+        tx_list = transactions_data.get("transactions", []) if isinstance(transactions_data, dict) else []
+        for tx in tx_list:
+            purpose = str(tx.get("purpose", "")).lower()
+            name = str(tx.get("name", "")).lower()
+            amt = tx.get("amount", 0) or 0
+
+            if amt > 0:
+                if any(k in purpose or k in name for k in ("dividende", "ausschüttung", "coupon")):
+                    dividends_total += amt
+                elif any(k in purpose or k in name for k in ("zins", "zinsen", "zinsgutschrift")):
+                    interest_total += amt
+                elif any(k in purpose or k in name for k in ("gewinn", "ertrag", "verkauf")):
+                    realized_gains += amt
+
+        sub = self.coordinator.data.get("subscription") or {}
+
+        attrs: dict[str, Any] = {
+            "cash_total": round(cash_total, 2),
+            "investments_total": round(inv_total, 2),
+            "allocation": {
+                "cash": round(cash_total, 2),
+                "investments": round(inv_total, 2),
+            },
+            "dividends_total": round(dividends_total, 2),
+            "interest_total": round(interest_total, 2),
+            "realized_gains_total": round(realized_gains, 2),
+            "total_income_gains": round(dividends_total + interest_total + realized_gains, 2),
+            "subscription_tier": sub.get("tier", "free"),
+            "account_count": len(accounts),
+            "accounts": [
+                {
+                    "id": a.get("id"),
+                    "name": a.get("name"),
+                    "type": a.get("type"),
+                    "balance": a.get("balance"),
+                    "currency": a.get("currency"),
+                }
+                for a in accounts
+            ],
+        }
         return attrs
+
 
 
 class FinanzflussInflationSensor(FinanzflussBaseEntity):
@@ -244,7 +359,7 @@ class FinanzflussInflationSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_inflation_{entry_id}"
         self._attr_translation_key = "inflation_rate"
@@ -257,7 +372,7 @@ class FinanzflussInflationSensor(FinanzflussBaseEntity):
         default_val = None
         rows = self.coordinator.data.get("inflation", [])
         if rows:
-            return rows[-1].get("inflationRate")
+            return cast(float | None, rows[-1].get("inflationRate"))
         return default_val
 
     @property
@@ -282,7 +397,7 @@ class FinanzflussBudgetTotalSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_budget_total_{entry_id}"
         self._attr_translation_key = "budget_total"
@@ -294,7 +409,7 @@ class FinanzflussBudgetTotalSensor(FinanzflussBaseEntity):
         """Return the state of the sensor."""
         budgets = self.coordinator.data.get("budgets", {})
         if budgets:
-            return budgets.get("totals", {}).get("amount")
+            return cast(float | None, budgets.get("totals", {}).get("amount"))
         return None
 
 
@@ -306,12 +421,12 @@ class FinanzflussBudgetSpentSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_budget_spent_{entry_id}"
         self._attr_translation_key = "budget_spent"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
@@ -319,7 +434,7 @@ class FinanzflussBudgetSpentSensor(FinanzflussBaseEntity):
         """Return the state of the sensor."""
         budgets = self.coordinator.data.get("budgets", {})
         if budgets:
-            return budgets.get("totals", {}).get("spent")
+            return cast(float | None, budgets.get("totals", {}).get("spent"))
         return None
 
 
@@ -328,12 +443,12 @@ class FinanzflussBudgetRemainingTotalSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_budget_remaining_{entry_id}"
         self._attr_translation_key = "budget_remaining"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
@@ -344,7 +459,7 @@ class FinanzflussBudgetRemainingTotalSensor(FinanzflussBaseEntity):
             totals = budgets.get("totals", {})
             amount = totals.get("amount") or 0
             spent = totals.get("spent") or 0
-            return amount - spent
+            return float(amount - spent)
         return None
 
 
@@ -355,19 +470,19 @@ class FinanzflussBudgetBucketSensor(FinanzflussBaseEntity):
         self, coordinator: FinanzflussDataUpdateCoordinator, bucket_id: int
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, coordinator.config_entry.entry_id)
+        super().__init__(coordinator)
         self._bucket_id = bucket_id
         self._attr_unique_id = f"finanzfluss_budget_bucket_{bucket_id}"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
-    def _bucket(self) -> dict | None:
+    def _bucket(self) -> dict[str, Any] | None:
         buckets = self.coordinator.data.get("budgets", {}).get("buckets", [])
         for bucket in buckets:
             if bucket["id"] == self._bucket_id:
-                return bucket
+                return cast(dict[str, Any], bucket)
         return None
 
     @property
@@ -382,7 +497,7 @@ class FinanzflussBudgetBucketSensor(FinanzflussBaseEntity):
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
         bucket = self._bucket
-        return bucket.get("spent") if bucket else None
+        return cast(float | None, bucket.get("spent")) if bucket else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -408,19 +523,19 @@ class FinanzflussBudgetBucketRemainingSensor(FinanzflussBaseEntity):
         self, coordinator: FinanzflussDataUpdateCoordinator, bucket_id: int
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, coordinator.config_entry.entry_id)
+        super().__init__(coordinator)
         self._bucket_id = bucket_id
         self._attr_unique_id = f"finanzfluss_budget_bucket_remaining_{bucket_id}"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
-    def _bucket(self) -> dict | None:
+    def _bucket(self) -> dict[str, Any] | None:
         buckets = self.coordinator.data.get("budgets", {}).get("buckets", [])
         for bucket in buckets:
             if bucket["id"] == self._bucket_id:
-                return bucket
+                return cast(dict[str, Any], bucket)
         return None
 
     @property
@@ -438,7 +553,7 @@ class FinanzflussBudgetBucketRemainingSensor(FinanzflussBaseEntity):
         if bucket:
             amount = bucket.get("amount") or 0
             spent = bucket.get("spent") or 0
-            return amount - spent
+            return float(amount - spent)
         return None
 
 
@@ -447,12 +562,12 @@ class FinanzflussMonthlyIncomeSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_monthly_income_{entry_id}"
         self._attr_translation_key = "monthly_income"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
@@ -460,7 +575,7 @@ class FinanzflussMonthlyIncomeSensor(FinanzflussBaseEntity):
         """Return the state of the sensor."""
         cashflow = self.coordinator.data.get("cashflow")
         if cashflow:
-            return cashflow.get("income")
+            return cast(float | None, cashflow.get("income"))
         return None
 
     @property
@@ -479,12 +594,12 @@ class FinanzflussMonthlyExpensesSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_monthly_expenses_{entry_id}"
         self._attr_translation_key = "monthly_expenses"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
@@ -492,7 +607,7 @@ class FinanzflussMonthlyExpensesSensor(FinanzflussBaseEntity):
         """Return the state of the sensor."""
         cashflow = self.coordinator.data.get("cashflow")
         if cashflow:
-            return cashflow.get("expenses")
+            return cast(float | None, cashflow.get("expenses"))
         return None
 
 
@@ -501,12 +616,12 @@ class FinanzflussMonthlyBalanceSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_monthly_balance_{entry_id}"
         self._attr_translation_key = "monthly_balance"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
@@ -515,9 +630,9 @@ class FinanzflussMonthlyBalanceSensor(FinanzflussBaseEntity):
         cashflow = self.coordinator.data.get("cashflow")
         if cashflow:
             if "balance" in cashflow:
-                return cashflow["balance"]
+                return cast(float | None, cashflow["balance"])
             if "income" in cashflow and "expenses" in cashflow:
-                return cashflow["income"] - cashflow["expenses"]
+                return cast(float | None, cashflow["income"] - cashflow["expenses"])
         return None
 
 
@@ -526,7 +641,7 @@ class FinanzflussMonthlySavingsRateSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_savings_rate_{entry_id}"
         self._attr_translation_key = "savings_rate"
@@ -538,7 +653,7 @@ class FinanzflussMonthlySavingsRateSensor(FinanzflussBaseEntity):
         """Return the state of the sensor."""
         cashflow = self.coordinator.data.get("cashflow")
         if cashflow:
-            return cashflow.get("savingsRate")
+            return cast(float | None, cashflow.get("savingsRate"))
         return None
 
 
@@ -550,7 +665,7 @@ class FinanzflussTransactionCountSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_transaction_count_{entry_id}"
         self._attr_translation_key = "transaction_count"
@@ -562,8 +677,10 @@ class FinanzflussTransactionCountSensor(FinanzflussBaseEntity):
         """Return the state of the sensor."""
         transactions = self.coordinator.data.get("transactions")
         if transactions:
-            return transactions.get("totalCount") or len(
-                transactions.get("transactions", [])
+            return cast(
+                int | None,
+                transactions.get("totalCount")
+                or len(transactions.get("transactions", [])),
             )
         return None
 
@@ -576,21 +693,21 @@ class FinanzflussLastTransactionSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_last_transaction_{entry_id}"
         self._attr_translation_key = "last_transaction"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
-    def _first_transaction(self) -> dict | None:
+    def _first_transaction(self) -> dict[str, Any] | None:
         transactions = self.coordinator.data.get("transactions")
         if transactions:
             txs = transactions.get("transactions", [])
             if txs:
-                return txs[0]
+                return cast(dict[str, Any], txs[0])
         return None
 
     @property
@@ -598,7 +715,7 @@ class FinanzflussLastTransactionSensor(FinanzflussBaseEntity):
         """Return the state of the sensor."""
         tx = self._first_transaction
         if tx:
-            return tx.get("amount")
+            return cast(float | None, tx.get("amount"))
         return None
 
     @property
@@ -620,12 +737,12 @@ class FinanzflussInvestmentTotalSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_investment_total_{entry_id}"
         self._attr_translation_key = "investment_total"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
@@ -633,8 +750,12 @@ class FinanzflussInvestmentTotalSensor(FinanzflussBaseEntity):
         """Return the state of the sensor."""
         investments = self.coordinator.data.get("investments")
         if investments:
-            return investments.get("totalValue") or sum(
-                p.get("marketValue", 0) for p in investments.get("positions", [])
+            return cast(
+                float | None,
+                investments.get("totalValue")
+                or sum(
+                    p.get("marketValue", 0) for p in investments.get("positions", [])
+                ),
             )
         return None
 
@@ -667,21 +788,21 @@ class FinanzflussInvestmentPositionSensor(FinanzflussBaseEntity):
         self, coordinator: FinanzflussDataUpdateCoordinator, position_id: int
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, coordinator.config_entry.entry_id)
+        super().__init__(coordinator)
         self._position_id = position_id
         self._attr_unique_id = f"finanzfluss_investment_position_{position_id}"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
-    def _position(self) -> dict | None:
+    def _position(self) -> dict[str, Any] | None:
         investments = self.coordinator.data.get("investments")
         if investments:
             positions = investments.get("positions", [])
             for p in positions:
                 if p["id"] == self._position_id:
-                    return p
+                    return cast(dict[str, Any], p)
         return None
 
     @property
@@ -696,7 +817,7 @@ class FinanzflussInvestmentPositionSensor(FinanzflussBaseEntity):
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
         position = self._position
-        return position.get("marketValue") if position else None
+        return cast(float | None, position.get("marketValue")) if position else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -721,19 +842,19 @@ class FinanzflussExemptionOrderSensor(FinanzflussBaseEntity):
         self, coordinator: FinanzflussDataUpdateCoordinator, order_id: int | str
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, coordinator.config_entry.entry_id)
+        super().__init__(coordinator)
         self._order_id = order_id
         self._attr_unique_id = f"finanzfluss_exemption_order_{order_id}"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
     @property
-    def _order(self) -> dict | None:
+    def _order(self) -> dict[str, Any] | None:
         orders = self.coordinator.data.get("exemption_orders", [])
         for order in orders:
             if order.get("id") == self._order_id or order.get("bank") == self._order_id:
-                return order
+                return cast(dict[str, Any], order)
         return None
 
     @property
@@ -751,7 +872,7 @@ class FinanzflussExemptionOrderSensor(FinanzflussBaseEntity):
         if order:
             allocated = order.get("allocatedAmount") or 0
             used = order.get("usedAmount") or 0
-            return allocated - used
+            return float(allocated - used)
         return None
 
     @property
@@ -776,7 +897,7 @@ class FinanzflussSubscriptionSensor(FinanzflussBaseEntity):
 
     def __init__(self, coordinator: FinanzflussDataUpdateCoordinator) -> None:
         """Initialize the sensor."""
-        entry_id = coordinator.config_entry.entry_id
+        entry_id = coordinator.config_entry.entry_id if coordinator.config_entry else ""
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"finanzfluss_subscription_{entry_id}"
         self._attr_translation_key = "subscription"
@@ -786,7 +907,7 @@ class FinanzflussSubscriptionSensor(FinanzflussBaseEntity):
         """Return the state of the sensor."""
         subscription = self.coordinator.data.get("subscription")
         if subscription:
-            return subscription.get("tier")
+            return cast(str | None, subscription.get("tier"))
         return None
 
     @property
