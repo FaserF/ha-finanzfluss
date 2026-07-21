@@ -3,6 +3,7 @@
 import asyncio
 from datetime import datetime, timedelta
 import random
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -183,9 +184,16 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
 
         # Required
         accounts_data = await self.api.get_accounts(ff_token, wapi_token)
-        budgets_data = await self.api.get_budgets(ff_token, month_str)
+
+        # Optional
+        budgets_data = {}
+        try:
+            budgets_data = await self.api.get_budgets(ff_token, month_str)
+        except Exception as err:
+            LOGGER.warning("Could not fetch budgets data: %s", err)
 
         # Optional — each wrapped in try/except, logs warning on failure
+
         inflation_data = None
         try:
             inflation_data = await self.api.get_inflation(

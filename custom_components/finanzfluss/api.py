@@ -127,6 +127,8 @@ class FinanzflussAPI:
             ) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
+                if resp.status in (400, 402, 500):
+                    return {}
                 resp.raise_for_status()
                 return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
@@ -148,6 +150,8 @@ class FinanzflussAPI:
             ) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
+                if resp.status in (400, 402, 500):
+                    return {}
                 resp.raise_for_status()
                 return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
@@ -167,6 +171,8 @@ class FinanzflussAPI:
             ) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
+                if resp.status in (400, 402, 500):
+                    return {}
                 resp.raise_for_status()
                 return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
@@ -175,17 +181,19 @@ class FinanzflussAPI:
             ) from err
 
     async def get_transactions(
-        self, ff_token: str, page: int = 0, size: int = 50
+        self, ff_token: str, page: int = 0, size: int = 500
     ) -> dict[str, Any]:
-        """Get transactions for a specific page."""
+        """Get transactions."""
         from .const import API_TRANSACTIONS
 
         try:
             headers = self._auth_headers(ff_token)
-            url = f"{API_TRANSACTIONS}?page={page}&size={size}"
+            url = f"{API_TRANSACTIONS}?page={page}&perPage={size}"
             async with self.session.get(url, headers=headers) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
+                if resp.status in (400, 402, 500):
+                    return {"totalCount": 0, "transactions": []}
                 resp.raise_for_status()
                 return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
@@ -194,31 +202,19 @@ class FinanzflussAPI:
             ) from err
 
     async def get_all_transactions(
-        self, ff_token: str, max_pages: int = 50
+        self, ff_token: str
     ) -> list[dict[str, Any]]:
-        """Get all historical transactions across all pages."""
-        all_txs: list[dict[str, Any]] = []
-        page = 0
-        size = 50
-        while page < max_pages:
-            try:
-                res = await self.get_transactions(
-                    ff_token, page=page, size=size
-                )
-                txs = res.get("transactions", [])
-                if not txs:
-                    break
-                all_txs.extend(txs)
-                total_count = res.get("totalCount", 0)
-                if len(all_txs) >= total_count or len(txs) < size:
-                    break
-                page += 1
-            except Exception as err:
-                from .const import LOGGER
+        """Get all transactions."""
+        try:
+            res = await self.get_transactions(ff_token, page=0, size=500)
+            return res.get("transactions", [])
+        except Exception as err:
+            from .const import LOGGER
 
-                LOGGER.warning("Error fetching transaction page %d: %s", page, err)
-                break
-        return all_txs
+            LOGGER.warning("Error fetching transactions: %s", err)
+            return []
+
+
 
     async def get_investments(self, ff_token: str, wapi_token: str) -> dict[str, Any]:
         """Get investments."""
@@ -229,7 +225,7 @@ class FinanzflussAPI:
             async with self.session.get(API_INVESTMENTS, headers=headers) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
-                if resp.status == 402:
+                if resp.status in (400, 402, 500):
                     # Investment breakdown requires Finanzfluss Plus subscription
                     return {}
                 resp.raise_for_status()
@@ -250,6 +246,8 @@ class FinanzflussAPI:
             async with self.session.get(API_EXEMPTION_ORDERS, headers=headers) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
+                if resp.status in (400, 402, 500):
+                    return []
                 resp.raise_for_status()
                 return cast(list[Any], await resp.json())
         except aiohttp.ClientError as err:
@@ -266,6 +264,8 @@ class FinanzflussAPI:
             async with self.session.get(API_SUBSCRIPTION, headers=headers) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
+                if resp.status in (400, 402, 500):
+                    return {}
                 resp.raise_for_status()
                 return cast(dict[str, Any], await resp.json())
         except aiohttp.ClientError as err:
@@ -284,9 +284,12 @@ class FinanzflussAPI:
             async with self.session.get(API_CATEGORIES, headers=headers) as resp:
                 if resp.status in (401, 403):
                     raise InvalidAuthError("Authentication expired")
+                if resp.status in (400, 402, 500):
+                    return []
                 resp.raise_for_status()
                 return cast(list[Any], await resp.json())
         except aiohttp.ClientError as err:
             raise CannotConnectError(
                 f"Failed to fetch categories: {_sanitize_error(err)}"
             ) from err
+

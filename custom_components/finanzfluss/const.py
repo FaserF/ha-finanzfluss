@@ -28,6 +28,8 @@ CONF_WAPI_ACCESS_TOKEN = "wapi_access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_USER_UUID = "user_uuid"
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_FALLBACK_CALCULATION = "fallback_calculation"
 
 DEFAULT_SCAN_INTERVAL = 86400  # seconds (24 hours)
 MIN_SCAN_INTERVAL = 600  # seconds (10 minutes)
+

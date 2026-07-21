@@ -1,0 +1,13 @@
+# Configuration for actions/labeler
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ['README.md', 'docs/**/*']
+
+code:
+  - changed-files:
+      - any-glob-to-any-file: ['custom_components/**/*', 'tests/**/*']
+
+workflows:
+  - changed-files:
+      - any-glob-to-any-file: ['.github/workflows/**/*']

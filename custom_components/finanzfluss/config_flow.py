@@ -168,10 +168,14 @@ class FinanzflussOptionsFlow(config_entries.OptionsFlow):
             self._config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
             // 60
         )
+        current_fallback = self._config_entry.options.get(
+            CONF_FALLBACK_CALCULATION, True
+        )
 
         if user_input is not None:
             interval_minutes = user_input[CONF_SCAN_INTERVAL]
             scan_interval_seconds = max(MIN_SCAN_INTERVAL, interval_minutes * 60)
+            fallback_enabled = user_input[CONF_FALLBACK_CALCULATION]
 
             new_email = user_input.get(CONF_EMAIL, "").strip()
             new_password = user_input.get(CONF_PASSWORD, "").strip()
@@ -181,11 +185,15 @@ class FinanzflussOptionsFlow(config_entries.OptionsFlow):
                 self._new_email = new_email
                 self._new_password = new_password
                 self._pending_interval = scan_interval_seconds
+                self._pending_fallback = fallback_enabled
                 return await self.async_step_reauth_mfa(None)
 
             return self.async_create_entry(
                 title="",
-                data={CONF_SCAN_INTERVAL: scan_interval_seconds},
+                data={
+                    CONF_SCAN_INTERVAL: scan_interval_seconds,
+                    CONF_FALLBACK_CALCULATION: fallback_enabled,
+                },
             )
 
         return self.async_show_form(
@@ -196,12 +204,17 @@ class FinanzflussOptionsFlow(config_entries.OptionsFlow):
                         CONF_SCAN_INTERVAL,
                         default=current_interval_minutes,
                     ): vol.All(int, vol.Range(min=MIN_SCAN_INTERVAL // 60)),
+                    vol.Required(
+                        CONF_FALLBACK_CALCULATION,
+                        default=current_fallback,
+                    ): bool,
                     vol.Optional(CONF_EMAIL, default=""): str,
                     vol.Optional(CONF_PASSWORD, default=""): str,
                 }
             ),
             errors=errors,
         )
+
 
     async def async_step_reauth_mfa(
         self, user_input: dict[str, Any] | None = None
@@ -288,7 +301,10 @@ class FinanzflussOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_create_entry(
             title="",
-            data={CONF_SCAN_INTERVAL: self._pending_interval},
+            data={
+                CONF_SCAN_INTERVAL: self._pending_interval,
+                CONF_FALLBACK_CALCULATION: getattr(self, "_pending_fallback", True),
+            },
         )
 
     def _init_schema(self) -> vol.Schema:
@@ -297,13 +313,21 @@ class FinanzflussOptionsFlow(config_entries.OptionsFlow):
             self._config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
             // 60
         )
+        current_fallback = self._config_entry.options.get(
+            CONF_FALLBACK_CALCULATION, True
+        )
         return vol.Schema(
             {
                 vol.Required(
                     CONF_SCAN_INTERVAL,
                     default=current_interval_minutes,
                 ): vol.All(int, vol.Range(min=MIN_SCAN_INTERVAL // 60)),
+                vol.Required(
+                    CONF_FALLBACK_CALCULATION,
+                    default=current_fallback,
+                ): bool,
                 vol.Optional(CONF_EMAIL, default=""): str,
                 vol.Optional(CONF_PASSWORD, default=""): str,
             }
         )
+
