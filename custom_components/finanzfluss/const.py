@@ -32,4 +32,3 @@ CONF_FALLBACK_CALCULATION = "fallback_calculation"
 
 DEFAULT_SCAN_INTERVAL = 86400  # seconds (24 hours)
 MIN_SCAN_INTERVAL = 600  # seconds (10 minutes)
-

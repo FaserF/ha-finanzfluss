@@ -159,7 +159,9 @@ class FinanzflussAPI:
                 f"Failed to fetch inflation: {_sanitize_error(err)}"
             ) from err
 
-    async def get_cashflow_summary(self, ff_token: str, month_str: str) -> dict[str, Any]:
+    async def get_cashflow_summary(
+        self, ff_token: str, month_str: str
+    ) -> dict[str, Any]:
         """Get cashflow summary (all periods with granularity=month)."""
         from .const import API_CASHFLOW
 
@@ -181,7 +183,7 @@ class FinanzflussAPI:
             ) from err
 
     async def get_transactions(
-        self, ff_token: str, page: int = 0, size: int = 500
+        self, ff_token: str, page: int = 1, size: int = 500
     ) -> dict[str, Any]:
         """Get transactions."""
         from .const import API_TRANSACTIONS
@@ -202,19 +204,31 @@ class FinanzflussAPI:
             ) from err
 
     async def get_all_transactions(
-        self, ff_token: str
+        self, ff_token: str, max_pages: int = 20
     ) -> list[dict[str, Any]]:
-        """Get all transactions."""
-        try:
-            res = await self.get_transactions(ff_token, page=0, size=500)
-            return res.get("transactions", [])
-        except Exception as err:
-            from .const import LOGGER
+        """Get all transactions across all pages in steps of 500 starting from page 1."""
+        all_txs: list[dict[str, Any]] = []
+        page = 1
+        size = 500
+        while page <= max_pages:
+            try:
+                res = await self.get_transactions(ff_token, page=page, size=size)
+                txs = res.get("transactions", [])
+                if not txs:
+                    break
+                all_txs.extend(txs)
+                total_count = res.get("totalCount")
+                if total_count is not None and len(all_txs) >= total_count:
+                    break
+                if len(txs) < size:
+                    break
+                page += 1
+            except Exception as err:
+                from .const import LOGGER
 
-            LOGGER.warning("Error fetching transactions: %s", err)
-            return []
-
-
+                LOGGER.warning("Error fetching transaction page %d: %s", page, err)
+                break
+        return all_txs
 
     async def get_investments(self, ff_token: str, wapi_token: str) -> dict[str, Any]:
         """Get investments."""
@@ -292,4 +306,3 @@ class FinanzflussAPI:
             raise CannotConnectError(
                 f"Failed to fetch categories: {_sanitize_error(err)}"
             ) from err
-

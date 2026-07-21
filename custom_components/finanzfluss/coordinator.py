@@ -250,7 +250,6 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         except Exception as err:
             LOGGER.warning("Could not fetch transactions data: %s", err)
 
-
         investments_data = None
         try:
             investments_data = await self.api.get_investments(ff_token, wapi_token)
@@ -288,11 +287,13 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             purpose = str(tx.get("purpose", "")).lower()
             name = str(tx.get("name", "")).lower()
             amt = tx.get("amount", 0) or 0
-            if any(
-                k in purpose or k in name
-                for k in ("depot", "wertpapier", "etf", "sparen", "aktie", "trade republic", "scalable")
+            if (
+                "wp.abrechnung" in purpose
+                or "isin" in purpose
+                or "wertpapier-abrechnung" in purpose
             ):
-                estimated_investment_total += abs(amt)
+                estimated_investment_total -= amt
+
 
         return {
             "accounts": accounts_data.get("accounts", []),
@@ -310,5 +311,3 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             "subscription": subscription_data,
             "categories": categories_data if isinstance(categories_data, list) else [],
         }
-
-

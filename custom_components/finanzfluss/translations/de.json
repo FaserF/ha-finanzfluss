@@ -34,6 +34,7 @@
         "description": "Passe das Aktualisierungsintervall an. Um die Zugangsdaten zu ändern, E-Mail und Passwort ausfüllen.",
         "data": {
           "scan_interval": "Aktualisierungsintervall (Minuten)",
+          "fallback_calculation": "Geschätzte Transaktionssumme nutzen, wenn kein Plus-Abo aktiv ist",
           "email": "Neue E-Mail (optional)",
           "password": "Neues Passwort (optional)"
         }

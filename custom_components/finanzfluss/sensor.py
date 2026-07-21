@@ -19,7 +19,6 @@ from .const import CONF_FALLBACK_CALCULATION, DOMAIN
 from .coordinator import FinanzflussDataUpdateCoordinator
 
 
-
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -273,8 +272,10 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
             # Native behavior: Add native investments totalValue if provided
             return float(total_accounts + investments_total)
 
-        fallback_enabled = self.coordinator.config_entry.options.get(
-            CONF_FALLBACK_CALCULATION, True
+        fallback_enabled = (
+            self.coordinator.config_entry.options.get(CONF_FALLBACK_CALCULATION, True)
+            if self.coordinator.config_entry
+            else True
         )
         if not fallback_enabled:
             return float(total_accounts)
@@ -282,9 +283,6 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
         # Fallback behavior (No Plus subscription): Add estimated investment transactions sum
         tx_est = self.coordinator.data.get("estimated_investment_total", 0.0)
         return float(total_accounts + tx_est)
-
-
-
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -299,8 +297,10 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
             if not a.get("isHidden") and a.get("type") != "01_depot"
         )
 
-        fallback_enabled = self.coordinator.config_entry.options.get(
-            CONF_FALLBACK_CALCULATION, True
+        fallback_enabled = (
+            self.coordinator.config_entry.options.get(CONF_FALLBACK_CALCULATION, True)
+            if self.coordinator.config_entry
+            else True
         )
 
         inv_total = 0.0
@@ -311,25 +311,35 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
         if inv_total == 0 and fallback_enabled:
             inv_total = self.coordinator.data.get("estimated_investment_total", 0.0)
 
-
-
         # Analyze transactions for dividends, interest, and gains
         dividends_total = 0.0
         interest_total = 0.0
         realized_gains = 0.0
 
-        tx_list = transactions_data.get("transactions", []) if isinstance(transactions_data, dict) else []
+        tx_list = (
+            transactions_data.get("transactions", [])
+            if isinstance(transactions_data, dict)
+            else []
+        )
         for tx in tx_list:
             purpose = str(tx.get("purpose", "")).lower()
             name = str(tx.get("name", "")).lower()
             amt = tx.get("amount", 0) or 0
 
             if amt > 0:
-                if any(k in purpose or k in name for k in ("dividende", "ausschüttung", "coupon")):
+                if any(
+                    k in purpose or k in name
+                    for k in ("dividende", "ausschüttung", "coupon")
+                ):
                     dividends_total += amt
-                elif any(k in purpose or k in name for k in ("zins", "zinsen", "zinsgutschrift")):
+                elif any(
+                    k in purpose or k in name
+                    for k in ("zins", "zinsen", "zinsgutschrift")
+                ):
                     interest_total += amt
-                elif any(k in purpose or k in name for k in ("gewinn", "ertrag", "verkauf")):
+                elif any(
+                    k in purpose or k in name for k in ("gewinn", "ertrag", "verkauf")
+                ):
                     realized_gains += amt
 
         sub = self.coordinator.data.get("subscription") or {}
@@ -344,8 +354,12 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
             "dividends_total": round(dividends_total, 2),
             "interest_total": round(interest_total, 2),
             "realized_gains_total": round(realized_gains, 2),
-            "total_income_gains": round(dividends_total + interest_total + realized_gains, 2),
-            "subscription_tier": sub.get("tier") if "tier" in sub else ("plus" if sub.get("hasPlusRole") else "free"),
+            "total_income_gains": round(
+                dividends_total + interest_total + realized_gains, 2
+            ),
+            "subscription_tier": sub.get("tier")
+            if "tier" in sub
+            else ("plus" if sub.get("hasPlusRole") else "free"),
             "account_count": len(accounts),
             "accounts": [
                 {
@@ -361,8 +375,6 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
         if not investments_data:
             attrs["investments_note"] = "No investment data available"
         return attrs
-
-
 
 
 class FinanzflussInflationSensor(FinanzflussBaseEntity):
@@ -930,8 +942,6 @@ class FinanzflussSubscriptionSensor(FinanzflussBaseEntity):
         if isinstance(sub_details, dict):
             return cast(str | None, sub_details.get("tier")) or "free"
         return "free"
-
-
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:

@@ -34,6 +34,7 @@
         "description": "Adjust the update interval. To change your login credentials, fill in email and password.",
         "data": {
           "scan_interval": "Update interval (minutes)",
+          "fallback_calculation": "Use estimated transaction sum if subscription is free",
           "email": "New email (optional)",
           "password": "New password (optional)"
         }
