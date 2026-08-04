@@ -177,7 +177,7 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
 
     async def _fetch_all_data(self, ff_token: str, wapi_token: str) -> dict:
         """Helper to fetch all data from API endpoints."""
-        now = datetime.now()
+        now = dt_util.now()
         month_str = now.strftime("%Y-%m-01")
         start_date = (now - timedelta(days=365)).strftime("%Y-%m-%d")
         end_date = now.strftime("%Y-%m-%d")
