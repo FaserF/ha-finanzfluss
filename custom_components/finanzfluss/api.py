@@ -70,7 +70,7 @@ class FinanzflussAPI:
                 # Check body for specific error codes like 40103 (OTP required) or 40104 (Invalid OTP)
                 try:
                     data = await resp.json()
-                except Exception:
+                except Exception:  # noqa: BLE001
                     data = {}
 
                 code = data.get("code")
@@ -223,7 +223,7 @@ class FinanzflussAPI:
                 if len(txs) < size:
                     break
                 page += 1
-            except Exception as err:
+            except Exception as err:  # noqa: BLE001
                 from .const import LOGGER
 
                 LOGGER.warning("Error fetching transaction page %d: %s", page, err)

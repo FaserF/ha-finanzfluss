@@ -149,7 +149,7 @@ def main():
                 .decode("utf-8")
                 .strip()
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             changelog_md = (
                 "_Changelog could not be generated automatically. See commit history._"
             )

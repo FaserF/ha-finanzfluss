@@ -61,7 +61,7 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             if "last_success" in cache:
                 try:
                     self._last_success = dt_util.parse_datetime(cache["last_success"])
-                except Exception:
+                except Exception:  # noqa: BLE001
                     LOGGER.warning("Could not parse cached last_success date")
 
     async def _async_update_data(self) -> dict:
@@ -189,7 +189,7 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         budgets_data = {}
         try:
             budgets_data = await self.api.get_budgets(ff_token, month_str)
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             LOGGER.warning("Could not fetch budgets data: %s", err)
 
         # Optional — each wrapped in try/except, logs warning on failure
@@ -199,13 +199,13 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             inflation_data = await self.api.get_inflation(
                 ff_token, start_date, end_date
             )
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             LOGGER.warning("Could not fetch inflation data: %s", err)
 
         cashflow_raw = None
         try:
             cashflow_raw = await self.api.get_cashflow_summary(ff_token, month_str)
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             LOGGER.warning("Could not fetch cashflow data: %s", err)
 
         # Parse cashflow: API returns {periods: [{date, income, expenses, savings}]}
@@ -247,7 +247,7 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
                 "totalCount": len(all_tx_list),
                 "transactions": all_tx_list,
             }
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             LOGGER.warning("Could not fetch transactions data: %s", err)
 
         investments_data = None
@@ -256,7 +256,7 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         except InvalidAuthError:
             # Re-raise so the coordinator can refresh tokens and retry
             raise
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             LOGGER.warning("Could not fetch investments data: %s", err)
 
         exemption_data = None
@@ -264,13 +264,13 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             exemption_data = await self.api.get_exemption_orders(
                 ff_token, wapi_token=wapi_token
             )
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             LOGGER.warning("Could not fetch exemption orders data: %s", err)
 
         subscription_data = None
         try:
             subscription_data = await self.api.get_subscription(ff_token)
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             LOGGER.warning("Could not fetch subscription data: %s", err)
 
         categories_data = None
@@ -278,7 +278,7 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             categories_data = await self.api.get_categories(
                 ff_token, wapi_token=wapi_token
             )
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             LOGGER.warning("Could not fetch categories data: %s", err)
 
         # Estimate investment deposits from entire historical transaction history when native investments API is unavailable
