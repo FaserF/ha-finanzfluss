@@ -7,8 +7,8 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN
 from .api import FinanzflussAPI
+from .const import DOMAIN
 from .coordinator import FinanzflussDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]

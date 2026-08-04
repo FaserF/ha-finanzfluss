@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-
 from custom_components.finanzfluss.sensor import (
     FinanzflussAccountSensor,
     FinanzflussBudgetBucketRemainingSensor,
@@ -25,7 +24,6 @@ from custom_components.finanzfluss.sensor import (
     FinanzflussSubscriptionSensor,
     FinanzflussTransactionCountSensor,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

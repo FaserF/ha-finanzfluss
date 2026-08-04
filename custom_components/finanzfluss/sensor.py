@@ -241,16 +241,15 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
             acc_type = account.get("type")
             balance = account.get("balance") or 0.0
 
-            if acc_type == "01_depot":
-                if balance == 0:
-                    balance = (
-                        account.get("marketValue")
-                        or account.get("portfolioValue")
-                        or account.get("totalValue")
-                        or account.get("currentValue")
-                        or account.get("value")
-                        or 0.0
-                    )
+            if acc_type == "01_depot" and balance == 0:
+                balance = (
+                    account.get("marketValue")
+                    or account.get("portfolioValue")
+                    or account.get("totalValue")
+                    or account.get("currentValue")
+                    or account.get("value")
+                    or 0.0
+                )
             total_accounts += balance
 
         investments_total = 0.0

@@ -1,8 +1,8 @@
 """DataUpdateCoordinator for Finanzfluss integration."""
 
 import asyncio
-from datetime import datetime, timedelta
 import random
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -57,12 +57,11 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
     async def async_load_cache(self) -> None:
         """Load state cache from HA storage."""
         cache = await self.store.async_load()
-        if cache:
-            if "last_success" in cache:
-                try:
-                    self._last_success = dt_util.parse_datetime(cache["last_success"])
-                except Exception:  # noqa: BLE001
-                    LOGGER.warning("Could not parse cached last_success date")
+        if cache and "last_success" in cache:
+            try:
+                self._last_success = dt_util.parse_datetime(cache["last_success"])
+            except Exception:  # noqa: BLE001
+                LOGGER.warning("Could not parse cached last_success date")
 
     async def _async_update_data(self) -> dict:
         """Fetch data from Finanzfluss API."""
