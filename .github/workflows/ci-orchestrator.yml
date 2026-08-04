@@ -1,4 +1,4 @@
-﻿name: CI Orchestrator
+name: CI Orchestrator
 
 on:
   push:
@@ -51,7 +51,7 @@ jobs:
 
       - name: Format and Fix with Ruff
         run: |
-          ruff check --fix .
+          ruff check --fix --unsafe-fixes .
           ruff format .
 
       - name: Commit and push changes
