@@ -11,7 +11,7 @@ from .const import DOMAIN
 from .api import FinanzflussAPI
 from .coordinator import FinanzflussDataUpdateCoordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, "diagnostics"]  # type: ignore
+PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
