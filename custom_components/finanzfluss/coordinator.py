@@ -181,31 +181,60 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         start_date = (now - timedelta(days=365)).strftime("%Y-%m-%d")
         end_date = now.strftime("%Y-%m-%d")
 
-        # Required
-        accounts_data = await self.api.get_accounts(ff_token, wapi_token)
+        # Fetch all independent API endpoints concurrently for instant startup and updates
+        accounts_task = self.api.get_accounts(ff_token, wapi_token)
+        budgets_task = self.api.get_budgets(ff_token, month_str)
+        inflation_task = self.api.get_inflation(ff_token, start_date, end_date)
+        cashflow_task = self.api.get_cashflow_summary(ff_token, month_str)
+        transactions_task = self.api.get_all_transactions(ff_token)
+        investments_task = self.api.get_investments(ff_token, wapi_token)
+        exemption_task = self.api.get_exemption_orders(ff_token, wapi_token=wapi_token)
+        subscription_task = self.api.get_subscription(ff_token)
+        categories_task = self.api.get_categories(ff_token, wapi_token=wapi_token)
 
-        # Optional
-        budgets_data = {}
-        try:
-            budgets_data = await self.api.get_budgets(ff_token, month_str)
-        except Exception as err:  # noqa: BLE001
-            LOGGER.warning("Could not fetch budgets data: %s", err)
+        results = await asyncio.gather(
+            accounts_task,
+            budgets_task,
+            inflation_task,
+            cashflow_task,
+            transactions_task,
+            investments_task,
+            exemption_task,
+            subscription_task,
+            categories_task,
+            return_exceptions=True,
+        )
 
-        # Optional — each wrapped in try/except, logs warning on failure
+        (
+            accounts_res,
+            budgets_res,
+            inflation_res,
+            cashflow_res,
+            transactions_res,
+            investments_res,
+            exemption_res,
+            subscription_res,
+            categories_res,
+        ) = results
 
-        inflation_data = None
-        try:
-            inflation_data = await self.api.get_inflation(
-                ff_token, start_date, end_date
-            )
-        except Exception as err:  # noqa: BLE001
-            LOGGER.warning("Could not fetch inflation data: %s", err)
+        # Check for invalid auth
+        for res in results:
+            if isinstance(res, InvalidAuthError):
+                raise res
 
-        cashflow_raw = None
-        try:
-            cashflow_raw = await self.api.get_cashflow_summary(ff_token, month_str)
-        except Exception as err:  # noqa: BLE001
-            LOGGER.warning("Could not fetch cashflow data: %s", err)
+        accounts_data = accounts_res if isinstance(accounts_res, dict) else {}
+        budgets_data = budgets_res if isinstance(budgets_res, dict) else {}
+        inflation_data = inflation_res if isinstance(inflation_res, dict) else None
+        cashflow_raw = cashflow_res if isinstance(cashflow_res, dict) else None
+        all_tx_list = transactions_res if isinstance(transactions_res, list) else []
+        transactions_data = {
+            "totalCount": len(all_tx_list),
+            "transactions": all_tx_list,
+        }
+        investments_data = investments_res if isinstance(investments_res, dict) else None
+        exemption_data = exemption_res if isinstance(exemption_res, dict) else None
+        subscription_data = subscription_res if isinstance(subscription_res, dict) else None
+        categories_data = categories_res if isinstance(categories_res, dict) else None
 
         # Parse cashflow: API returns {periods: [{date, income, expenses, savings}]}
         # Extract current month's period and compute savings rate
@@ -213,16 +242,13 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         if isinstance(cashflow_raw, dict):
             periods = cashflow_raw.get("periods", [])
             if periods:
-                # Find current month period (month_str = "YYYY-MM-01")
                 current = next(
                     (p for p in periods if p.get("date", "").startswith(month_str[:7])),
-                    periods[-1],  # fallback to latest
+                    periods[-1],
                 )
                 income = current.get("income", 0) or 0
                 expenses = current.get("expenses", 0) or 0
-                savings = current.get("savings") or (
-                    income + expenses
-                )  # expenses are negative
+                savings = current.get("savings") or (income + expenses)
                 savings_rate = (
                     round((savings / income) * 100, 1)
                     if income and income > 0
@@ -230,55 +256,13 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
                 )
                 cashflow_data = {
                     "income": income,
-                    "expenses": abs(expenses),  # make positive for display
+                    "expenses": abs(expenses),
                     "balance": income + expenses,
                     "savings": savings,
                     "savingsRate": savings_rate,
                     "period": current.get("date"),
-                    "history": periods[-12:],  # last 12 months for attributes
+                    "history": periods[-12:],
                 }
-
-        transactions_data = None
-        all_tx_list: list[dict[str, Any]] = []
-        try:
-            all_tx_list = await self.api.get_all_transactions(ff_token)
-            transactions_data = {
-                "totalCount": len(all_tx_list),
-                "transactions": all_tx_list,
-            }
-        except Exception as err:  # noqa: BLE001
-            LOGGER.warning("Could not fetch transactions data: %s", err)
-
-        investments_data = None
-        try:
-            investments_data = await self.api.get_investments(ff_token, wapi_token)
-        except InvalidAuthError:
-            # Re-raise so the coordinator can refresh tokens and retry
-            raise
-        except Exception as err:  # noqa: BLE001
-            LOGGER.warning("Could not fetch investments data: %s", err)
-
-        exemption_data = None
-        try:
-            exemption_data = await self.api.get_exemption_orders(
-                ff_token, wapi_token=wapi_token
-            )
-        except Exception as err:  # noqa: BLE001
-            LOGGER.warning("Could not fetch exemption orders data: %s", err)
-
-        subscription_data = None
-        try:
-            subscription_data = await self.api.get_subscription(ff_token)
-        except Exception as err:  # noqa: BLE001
-            LOGGER.warning("Could not fetch subscription data: %s", err)
-
-        categories_data = None
-        try:
-            categories_data = await self.api.get_categories(
-                ff_token, wapi_token=wapi_token
-            )
-        except Exception as err:  # noqa: BLE001
-            LOGGER.warning("Could not fetch categories data: %s", err)
 
         # Estimate investment deposits from entire historical transaction history when native investments API is unavailable
         estimated_investment_total = 0.0
