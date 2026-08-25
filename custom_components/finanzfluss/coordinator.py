@@ -216,10 +216,13 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             categories_res,
         ) = results
 
-        # Check for invalid auth
+        # Check for invalid auth or critical errors
         for res in results:
             if isinstance(res, InvalidAuthError):
                 raise res
+
+        if isinstance(accounts_res, CannotConnectError):
+            raise UpdateFailed(f"Cannot connect to Finanzfluss API: {accounts_res}")
 
         accounts_data = accounts_res if isinstance(accounts_res, dict) else {}
         budgets_data = budgets_res if isinstance(budgets_res, dict) else {}
