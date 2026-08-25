@@ -90,8 +90,8 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
         fetch_lock: asyncio.Lock = domain_data.setdefault("fetch_lock", asyncio.Lock())
 
         async with fetch_lock:
-            # 4. Jitter: sleep 5-30s if we have run successfully before to avoid concurrent spikes
-            if self._last_success is not None:
+            # 4. Jitter: sleep 5-30s during periodic background updates to avoid concurrent spikes
+            if self._last_success is not None and self.data is not None:
                 jitter = random.uniform(5.0, 30.0)
                 LOGGER.debug("Waiting %.1f s jitter before API request", jitter)
                 await asyncio.sleep(jitter)
