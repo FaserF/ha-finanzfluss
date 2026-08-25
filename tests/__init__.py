@@ -1,5 +1,6 @@
 # Tests package
 import asyncio
+import contextlib
 import sys
 
 if sys.platform == "win32":
@@ -7,7 +8,5 @@ if sys.platform == "win32":
 
     sys.modules["fcntl"] = types.ModuleType("fcntl")
     sys.modules["resource"] = types.ModuleType("resource")
-    try:
+    with contextlib.suppress(AttributeError):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    except AttributeError:
-        pass

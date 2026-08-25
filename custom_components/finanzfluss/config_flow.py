@@ -39,7 +39,7 @@ class FinanzflussConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @config_entries.callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> "FinanzflussOptionsFlow":
+    ) -> FinanzflussOptionsFlow:
         """Return the options flow handler."""
         return FinanzflussOptionsFlow(config_entry)
 
@@ -281,7 +281,7 @@ class FinanzflussOptionsFlow(config_entries.OptionsFlow):
                     data_schema=vol.Schema({vol.Required("otp_code"): str}),
                     errors=errors,
                 )
-            except (CannotConnectError, FinanzflussAPIError):
+            except CannotConnectError, FinanzflussAPIError:
                 errors["base"] = "cannot_connect"
                 return self.async_show_form(
                     step_id="reauth_mfa",
