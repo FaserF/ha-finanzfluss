@@ -3,7 +3,6 @@
 import asyncio
 import random
 from datetime import datetime, timedelta
-from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -231,9 +230,13 @@ class FinanzflussDataUpdateCoordinator(DataUpdateCoordinator[dict]):
             "totalCount": len(all_tx_list),
             "transactions": all_tx_list,
         }
-        investments_data = investments_res if isinstance(investments_res, dict) else None
+        investments_data = (
+            investments_res if isinstance(investments_res, dict) else None
+        )
         exemption_data = exemption_res if isinstance(exemption_res, dict) else None
-        subscription_data = subscription_res if isinstance(subscription_res, dict) else None
+        subscription_data = (
+            subscription_res if isinstance(subscription_res, dict) else None
+        )
         categories_data = categories_res if isinstance(categories_res, dict) else None
 
         # Parse cashflow: API returns {periods: [{date, income, expenses, savings}]}
