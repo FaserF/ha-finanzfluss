@@ -407,3 +407,41 @@ class TestGetCategories:
         api = FinanzflussAPI(session)
         with pytest.raises(CannotConnectError):
             await api.get_categories("ff_token")
+
+
+# ---------------------------------------------------------------------------
+# get_all_transactions()
+# ---------------------------------------------------------------------------
+
+
+class TestGetAllTransactions:
+    @pytest.mark.asyncio
+    async def test_get_all_transactions_auth_error_propagates(self):
+        """InvalidAuthError must propagate so coordinator can refresh tokens."""
+        cm, _ = _make_response(401, {"error": "unauthorized"})
+        session = MagicMock()
+        session.get.return_value = cm
+        api = FinanzflussAPI(session)
+        with pytest.raises(InvalidAuthError):
+            await api.get_all_transactions("expired_token")
+
+    @pytest.mark.asyncio
+    async def test_get_all_transactions_connection_error_returns_partial(self):
+        """CannotConnectError on page 1 should return empty list (soft fail)."""
+        session = _make_session("get", 0, raise_on_request=aiohttp.ClientError())
+        api = FinanzflussAPI(session)
+        result = await api.get_all_transactions("ff_token")
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_all_transactions_single_page(self):
+        """Returns all transactions when total fits in one page."""
+        payload = {
+            "totalCount": 2,
+            "transactions": [{"id": 1, "amount": -10.0}, {"id": 2, "amount": -20.0}],
+        }
+        session = _make_session("get", 200, payload)
+        api = FinanzflussAPI(session)
+        result = await api.get_all_transactions("ff_token")
+        assert len(result) == 2
+        assert result[0]["id"] == 1

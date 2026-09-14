@@ -224,10 +224,22 @@ class FinanzflussAPI:
                 if len(txs) < size:
                     break
                 page += 1
+            except InvalidAuthError:
+                # Let auth errors propagate so the coordinator can refresh tokens
+                raise
+            except CannotConnectError as err:
+                from .const import LOGGER
+
+                LOGGER.warning(
+                    "Connection error fetching transaction page %d: %s", page, err
+                )
+                break
             except Exception as err:  # noqa: BLE001
                 from .const import LOGGER
 
-                LOGGER.warning("Error fetching transaction page %d: %s", page, err)
+                LOGGER.warning(
+                    "Unexpected error fetching transaction page %d: %s", page, err
+                )
                 break
         return all_txs
 
