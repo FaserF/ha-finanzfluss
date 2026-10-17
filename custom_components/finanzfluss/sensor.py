@@ -158,7 +158,7 @@ class FinanzflussAccountSensor(FinanzflussBaseEntity):
                     val = float(raw_state)
                     if val > 0:
                         return val, dict(getattr(st, "attributes", None) or {})
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     pass
         return None, {}
 
@@ -291,7 +291,7 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
                     val = float(raw_state)
                     if val > 0:
                         return val
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     pass
         return None
 
