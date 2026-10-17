@@ -138,6 +138,30 @@ class FinanzflussAccountSensor(FinanzflussBaseEntity):
             return f"Account {account.get('name', '')}"
         return f"Account {self._account_id}"
 
+    def _get_tr_live_portfolio(self) -> tuple[float | None, dict[str, Any]]:
+        """Query ha-traderepublic sensor state in Home Assistant if available."""
+        hass = getattr(self.coordinator, "hass", None)
+        if not hass or not getattr(hass, "states", None):
+            return None, {}
+        for eid in (
+            "sensor.trade_republic_portfolio_portfolio_value",
+            "sensor.traderepublic_portfolio_value",
+        ):
+            st = hass.states.get(eid)
+            raw_state = getattr(st, "state", None) if st else None
+            if isinstance(raw_state, str) and raw_state not in (
+                "unavailable",
+                "unknown",
+                "",
+            ):
+                try:
+                    val = float(raw_state)
+                    if val > 0:
+                        return val, dict(getattr(st, "attributes", None) or {})
+                except (ValueError, TypeError):
+                    pass
+        return None, {}
+
     @property
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
@@ -154,6 +178,25 @@ class FinanzflussAccountSensor(FinanzflussBaseEntity):
                 or account.get("value")
                 or 0.0
             )
+            acc_name = str(account.get("name") or account.get("bankName") or "").lower()
+            if (not val or val == 0.0) and "trade republic" in acc_name:
+                tr_val, _ = self._get_tr_live_portfolio()
+                if tr_val is not None:
+                    val = tr_val
+                else:
+                    fallback_enabled = (
+                        self.coordinator.config_entry.options.get(
+                            CONF_FALLBACK_CALCULATION, True
+                        )
+                        if self.coordinator.config_entry
+                        else True
+                    )
+                    if fallback_enabled:
+                        est = self.coordinator.data.get(
+                            "estimated_investment_total", 0.0
+                        )
+                        if est and est > 0:
+                            val = float(est)
         return cast(float | None, val)
 
     @property
@@ -228,6 +271,30 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
         self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "EUR"
 
+    def _get_tr_live_portfolio_value(self) -> float | None:
+        """Return live portfolio value from ha-traderepublic if available and numeric."""
+        hass = getattr(self.coordinator, "hass", None)
+        if not hass or not getattr(hass, "states", None):
+            return None
+        for eid in (
+            "sensor.trade_republic_portfolio_portfolio_value",
+            "sensor.traderepublic_portfolio_value",
+        ):
+            st = hass.states.get(eid)
+            raw_state = getattr(st, "state", None) if st else None
+            if isinstance(raw_state, str) and raw_state not in (
+                "unavailable",
+                "unknown",
+                "",
+            ):
+                try:
+                    val = float(raw_state)
+                    if val > 0:
+                        return val
+                except (ValueError, TypeError):
+                    pass
+        return None
+
     @property
     def native_value(self) -> float | None:
         """Calculate total net worth: accounts balance + investments totalValue (if not already included in accounts)."""
@@ -279,6 +346,11 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
         if not fallback_enabled:
             return float(total_accounts)
 
+        # Prefer live Trade Republic portfolio value if ha-traderepublic is active
+        tr_live = self._get_tr_live_portfolio_value()
+        if tr_live is not None:
+            return float(total_accounts + tr_live)
+
         # Fallback behavior (No Plus subscription): Add estimated investment transactions sum
         tx_est = self.coordinator.data.get("estimated_investment_total", 0.0)
         return float(total_accounts + tx_est)
@@ -308,7 +380,12 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
                 p.get("marketValue", 0) for p in investments_data.get("positions", [])
             )
         if inv_total == 0 and fallback_enabled:
-            inv_total = self.coordinator.data.get("estimated_investment_total", 0.0)
+            tr_live = self._get_tr_live_portfolio_value()
+            inv_total = (
+                tr_live
+                if tr_live is not None
+                else self.coordinator.data.get("estimated_investment_total", 0.0)
+            )
 
         # Analyze transactions for dividends, interest, and gains
         dividends_total = 0.0
