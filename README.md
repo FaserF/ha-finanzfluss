@@ -48,6 +48,16 @@ A **Home Assistant custom integration** for [Finanzfluss Copilot](https://www.fi
 
 ---
 
+## 🔌 Recommended Hardware & Ecosystem Links
+
+| Device / Service | Integration Use Case | Link |
+| :--- | :--- | :--- |
+| **Trade Republic (Zinsen & kostenlose ETF-Sparpläne)** | Kompatibel mit Home Assistant Depot- & Cashflow-Sensoren | [Offizielle Geräte-Seite →](https://fabiseitz.de/go/tr) |
+| **Finanzfluss Copilot Dashboard** | Automatische Konto-, Depot- & Freistellungsauftrag-Synchronisation | [Offizielle Geräte-Seite →](https://fabiseitz.de/go/finanzfluss) |
+
+
+---
+
 ## 📦 Installation
 
 ### Via HACS (Recommended)
