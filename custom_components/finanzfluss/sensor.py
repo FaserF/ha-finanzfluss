@@ -63,11 +63,14 @@ async def async_setup_entry(
         sub.get("tier") == "plus"
         or sub.get("isActive") is True
         or bool((coordinator.data.get("investments") or {}).get("positions"))
+        or bool((coordinator.data.get("investments") or {}).get("breakdown"))
     )
 
     if has_plus:
         entities.append(FinanzflussInvestmentTotalSensor(coordinator))
-        investments = (coordinator.data.get("investments") or {}).get("positions", [])
+        investments = (coordinator.data.get("investments") or {}).get("breakdown") or (
+            coordinator.data.get("investments") or {}
+        ).get("positions", [])
         for position in investments:
             entities.append(
                 FinanzflussInvestmentPositionSensor(coordinator, position["id"])
@@ -75,11 +78,17 @@ async def async_setup_entry(
 
     exemption_orders = coordinator.data.get("exemption_orders", [])
     for order in exemption_orders:
-        entities.append(
-            FinanzflussExemptionOrderSensor(
-                coordinator, order.get("id") or order.get("bank")
+        order_id = (
+            order.get("id")
+            or (
+                order.get("account", {}).get("id")
+                if isinstance(order.get("account"), dict)
+                else None
             )
+            or order.get("bank")
         )
+        if order_id is not None:
+            entities.append(FinanzflussExemptionOrderSensor(coordinator, order_id))
 
     async_add_entities(entities)
 
@@ -223,7 +232,7 @@ class FinanzflussAccountSensor(FinanzflussBaseEntity):
         # Aggregate holdings details inside the depot account entity to avoid entity spam
         if account.get("type") == "01_depot":
             investments = self.coordinator.data.get("investments") or {}
-            positions = investments.get("positions", [])
+            positions = investments.get("breakdown") or investments.get("positions", [])
             depot_positions = []
             total_gain = 0.0
             total_purchase = 0.0
@@ -238,7 +247,7 @@ class FinanzflussAccountSensor(FinanzflussBaseEntity):
                             "name": p.get("name"),
                             "isin": p.get("isin"),
                             "quantity": p.get("quantity"),
-                            "market_value": p.get("marketValue"),
+                            "market_value": p.get("marketValue", p.get("amount")),
                             "purchase_value": p.get("purchaseValue"),
                             "gain": p.get("gain"),
                             "gain_percent": p.get("gainPercent"),
@@ -322,8 +331,13 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
         investments_total = 0.0
         investments_data = self.coordinator.data.get("investments")
         if investments_data and isinstance(investments_data, dict):
-            investments_total = investments_data.get("totalValue") or sum(
-                p.get("marketValue", 0) for p in investments_data.get("positions", [])
+            positions = investments_data.get("breakdown") or investments_data.get(
+                "positions", []
+            )
+            investments_total = (
+                investments_data.get("totalMarketValue")
+                or investments_data.get("totalValue")
+                or sum(p.get("amount", p.get("marketValue", 0)) for p in positions)
             )
 
         # Check for active Plus subscription
@@ -376,8 +390,13 @@ class FinanzflussNetWorthSensor(FinanzflussBaseEntity):
 
         inv_total = 0.0
         if investments_data and isinstance(investments_data, dict):
-            inv_total = investments_data.get("totalValue") or sum(
-                p.get("marketValue", 0) for p in investments_data.get("positions", [])
+            positions = investments_data.get("breakdown") or investments_data.get(
+                "positions", []
+            )
+            inv_total = (
+                investments_data.get("totalMarketValue")
+                or investments_data.get("totalValue")
+                or sum(p.get("amount", p.get("marketValue", 0)) for p in positions)
             )
         if inv_total == 0 and fallback_enabled:
             tr_live = self._get_tr_live_portfolio_value()
@@ -852,12 +871,12 @@ class FinanzflussInvestmentTotalSensor(FinanzflussBaseEntity):
         """Return the state of the sensor."""
         investments = self.coordinator.data.get("investments")
         if investments:
+            positions = investments.get("breakdown") or investments.get("positions", [])
             return cast(
                 float | None,
-                investments.get("totalValue")
-                or sum(
-                    p.get("marketValue", 0) for p in investments.get("positions", [])
-                ),
+                investments.get("totalMarketValue")
+                or investments.get("totalValue")
+                or sum(p.get("amount", p.get("marketValue", 0)) for p in positions),
             )
         return None
 
@@ -869,7 +888,7 @@ class FinanzflussInvestmentTotalSensor(FinanzflussBaseEntity):
             return None
 
         # Calculate totals from positions if not present at root
-        positions = investments.get("positions", [])
+        positions = investments.get("breakdown") or investments.get("positions", [])
         total_gain = sum(p.get("gain", 0) or 0 for p in positions)
         total_purchase = sum(p.get("purchaseValue", 0) or 0 for p in positions)
 
@@ -901,7 +920,7 @@ class FinanzflussInvestmentPositionSensor(FinanzflussBaseEntity):
     def _position(self) -> dict[str, Any] | None:
         investments = self.coordinator.data.get("investments")
         if investments:
-            positions = investments.get("positions", [])
+            positions = investments.get("breakdown") or investments.get("positions", [])
             for p in positions:
                 if p["id"] == self._position_id:
                     return cast(dict[str, Any], p)
@@ -919,7 +938,12 @@ class FinanzflussInvestmentPositionSensor(FinanzflussBaseEntity):
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
         position = self._position
-        return cast(float | None, position.get("marketValue")) if position else None
+        if not position:
+            return None
+        val = position.get("marketValue")
+        if val is None:
+            val = position.get("amount")
+        return cast(float | None, val)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -955,7 +979,16 @@ class FinanzflussExemptionOrderSensor(FinanzflussBaseEntity):
     def _order(self) -> dict[str, Any] | None:
         orders = self.coordinator.data.get("exemption_orders", [])
         for order in orders:
-            if order.get("id") == self._order_id or order.get("bank") == self._order_id:
+            order_id = (
+                order.get("id")
+                or (
+                    order.get("account", {}).get("id")
+                    if isinstance(order.get("account"), dict)
+                    else None
+                )
+                or order.get("bank")
+            )
+            if order_id == self._order_id or order.get("bank") == self._order_id:
                 return cast(dict[str, Any], order)
         return None
 
@@ -964,7 +997,21 @@ class FinanzflussExemptionOrderSensor(FinanzflussBaseEntity):
         """Return the name of the sensor."""
         order = self._order
         if order:
-            return f"Exemption Order {order.get('bank', self._order_id)}"
+            bank_name = (
+                order.get("bank")
+                or (
+                    order.get("account", {}).get("name")
+                    if isinstance(order.get("account"), dict)
+                    else None
+                )
+                or (
+                    order.get("account", {}).get("bankName")
+                    if isinstance(order.get("account"), dict)
+                    else None
+                )
+                or str(self._order_id)
+            )
+            return f"Exemption Order {bank_name}"
         return f"Exemption Order {self._order_id}"
 
     @property
@@ -972,8 +1019,10 @@ class FinanzflussExemptionOrderSensor(FinanzflussBaseEntity):
         """Return the state of the sensor."""
         order = self._order
         if order:
-            allocated = order.get("allocatedAmount") or 0
-            used = order.get("usedAmount") or 0
+            if "remaining" in order and order["remaining"] is not None:
+                return float(order["remaining"])
+            allocated = order.get("amount") or order.get("allocatedAmount") or 0
+            used = order.get("used") or order.get("usedAmount") or 0
             return float(allocated - used)
         return None
 
@@ -983,10 +1032,24 @@ class FinanzflussExemptionOrderSensor(FinanzflussBaseEntity):
         order = self._order
         if not order:
             return None
+        bank_name = (
+            order.get("bank")
+            or (
+                order.get("account", {}).get("name")
+                if isinstance(order.get("account"), dict)
+                else None
+            )
+            or (
+                order.get("account", {}).get("bankName")
+                if isinstance(order.get("account"), dict)
+                else None
+            )
+        )
         return {
-            "bank": order.get("bank"),
-            "allocated_amount": order.get("allocatedAmount"),
-            "used_amount": order.get("usedAmount"),
+            "bank": bank_name,
+            "allocated_amount": order.get("amount") or order.get("allocatedAmount"),
+            "used_amount": order.get("used") or order.get("usedAmount"),
+            "remaining_amount": order.get("remaining"),
             "year": order.get("year"),
         }
 
