@@ -178,8 +178,8 @@ def mock_config_entry() -> MockConfigEntry:
         domain=DOMAIN,
         data={
             CONF_EMAIL: "test@example.com",
-            CONF_FF_[REDACTED_SECRET_72251],
-            CONF_WAPI_[REDACTED_SECRET_94352],
+            CONF_FF_ACCESS_TOKEN: "ff_access_token_test",
+            CONF_WAPI_ACCESS_TOKEN: "wapi_access_token_test",
             CONF_REFRESH_TOKEN: "refresh_token_test",
         },
         unique_id="test@example.com",

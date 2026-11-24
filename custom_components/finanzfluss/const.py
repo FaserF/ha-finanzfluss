@@ -23,8 +23,8 @@ API_CATEGORIES = f"{BASE_URL}/v4/categories"
 # Configuration Keys
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
-CONF_FF_[REDACTED_SECRET_27095]
-CONF_WAPI_[REDACTED_SECRET_36753]
+CONF_FF_ACCESS_TOKEN = "ff_access_token"
+CONF_WAPI_ACCESS_TOKEN = "wapi_access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_USER_UUID = "user_uuid"
 CONF_SCAN_INTERVAL = "scan_interval"

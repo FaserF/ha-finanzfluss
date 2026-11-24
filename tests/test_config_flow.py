@@ -24,7 +24,7 @@ AUTH_DATA = {
 }
 
 EMAIL = "test@example.com"
-[REDACTED_SECRET_49669]
+PASSWORD = "secure_password"
 OTP = "123456"
 
 
