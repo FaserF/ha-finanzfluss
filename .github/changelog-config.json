@@ -1,27 +1,27 @@
-﻿{
+{
   "categories": [
     {
-      "title": "ðŸš€ Features",
+      "title": "🚀 Features",
       "labels": ["feat", "feature", "enhancement"]
     },
     {
-      "title": "ðŸ› Bug Fixes",
+      "title": "🐛 Bug Fixes",
       "labels": ["fix", "bug"]
     },
     {
-      "title": "ðŸ“š Documentation",
+      "title": "📚 Documentation",
       "labels": ["docs", "documentation"]
     },
     {
-      "title": "ðŸ”§ Maintenance",
+      "title": "🔧 Maintenance",
       "labels": ["chore", "refactor", "perf"]
     },
     {
-      "title": "ðŸ§ª Tests",
+      "title": "🧪 Tests",
       "labels": ["test"]
     },
     {
-      "title": "ðŸ“¦ Dependencies",
+      "title": "📦 Dependencies",
       "labels": ["dependencies"]
     }
   ],
@@ -57,4 +57,3 @@
     }
   ]
 }
-

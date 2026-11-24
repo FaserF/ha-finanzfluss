@@ -1,13 +1,21 @@
-# Configuration for actions/labeler
+# Pull Request Labeler configuration
+enhancement:
+  - head-branch: ['^feat/', '^feature/']
+
+bug:
+  - head-branch: ['^fix/', '^bugfix/']
+
+dependencies:
+  - head-branch: ['^renovate/', '^deps/']
 
 documentation:
   - changed-files:
-      - any-glob-to-any-file: ['README.md', 'docs/**/*']
+    - any-glob-to-any-file: ['**/*.md', 'docs/**']
 
-code:
+ci:
   - changed-files:
-      - any-glob-to-any-file: ['custom_components/**/*', 'tests/**/*']
+    - any-glob-to-any-file: ['.github/**', 'scripts/**']
 
-workflows:
+tests:
   - changed-files:
-      - any-glob-to-any-file: ['.github/workflows/**/*']
+    - any-glob-to-any-file: ['tests/**', '**/*test*']

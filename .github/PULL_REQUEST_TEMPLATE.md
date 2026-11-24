@@ -1,4 +1,4 @@
-﻿## Description
+## Description
 
 Please include a summary of the change and which issue is fixed (if applicable). Please also include relevant motivation and context.
 
@@ -11,19 +11,13 @@ Please delete options that are not relevant.
 - [ ] Bug fix (non-breaking change which fixes an issue)
 - [ ] New feature (non-breaking change which adds functionality)
 - [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] This change requires a documentation update
-
-## How Has This Been Tested?
-
-Please describe the tests that you ran to verify your changes.
-
-- [ ] Unit Tests
-- [ ] Tested on actual hardware (finanzfluss Version: _______, Device: _______)
+- [ ] Dependency update
+- [ ] Maintenance / CI improvement
+- [ ] Documentation update
 
 ## Checklist:
 
-- [ ] My code follows the style guidelines of this project (`make lint`)
+- [ ] My code follows the style guidelines of this project
 - [ ] I have performed a self-review of my own code
-- [ ] I have made corresponding changes to the documentation
-- [ ] New and existing unit tests pass locally with my changes (`make test`)
-
+- [ ] I have made corresponding changes to the documentation (if applicable)
+- [ ] Tests and linter pass locally or in CI with my changes
