@@ -3,10 +3,11 @@
     "step": {
       "user": {
         "title": "Mit Finanzfluss verbinden",
-        "description": "Bitte gib deine Finanzfluss-Zugangsdaten ein. Dein Passwort wird verschlüsselt gespeichert.",
+        "description": "Gib E-Mail und Passwort ein oder einen Refresh-Token (für Google-/Apple-Login).",
         "data": {
           "email": "E-Mail",
-          "password": "Passwort"
+          "password": "Passwort",
+          "refresh_token": "Refresh-Token (für Google-/Apple-Login)"
         }
       },
       "mfa": {
@@ -19,8 +20,9 @@
     },
     "error": {
       "cannot_connect": "Verbindung zum Server fehlgeschlagen",
-      "invalid_auth": "Ungültige E-Mail oder ungültiges Passwort",
+      "invalid_auth": "Ungültige E-Mail, ungültiges Passwort oder ungültiger Refresh-Token",
       "invalid_otp": "Ungültiger 2FA-Code",
+      "missing_credentials": "Bitte gib entweder E-Mail und Passwort oder einen Refresh-Token ein",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten"
     },
     "abort": {

@@ -58,48 +58,88 @@ class FinanzflussConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            email: str = user_input[CONF_EMAIL]
-            password: str = user_input[CONF_PASSWORD]
-
-            # Check if already configured
-            await self.async_set_unique_id(email.lower())
-            self._abort_if_unique_id_configured()
+            email = user_input.get(CONF_EMAIL, "").strip()
+            password = user_input.get(CONF_PASSWORD, "")
+            refresh_token = user_input.get(CONF_REFRESH_TOKEN, "").strip()
 
             session = async_get_clientsession(self.hass)
             api = FinanzflussAPI(session)
 
-            try:
-                auth_data = await api.login(email, password)
-            except OTPRequiredError:
-                # Store credentials temporarily for the MFA step
-                self._email = email
-                self._password = password
-                return await self.async_step_mfa()
-            except InvalidAuthError:
-                errors["base"] = "invalid_auth"
-            except CannotConnectError:
-                errors["base"] = "cannot_connect"
-            except FinanzflussAPIError:
-                errors["base"] = "unknown"
+            if refresh_token:
+                try:
+                    auth_data = await api.refresh_tokens(refresh_token)
+                except InvalidAuthError:
+                    errors["base"] = "invalid_auth"
+                except CannotConnectError:
+                    errors["base"] = "cannot_connect"
+                except FinanzflussAPIError:
+                    errors["base"] = "unknown"
+                else:
+                    user_uuid = str(auth_data.get("uuid") or "")
+                    account_label = (
+                        email
+                        or str(auth_data.get("email") or "").strip()
+                        or (
+                            f"oauth_{user_uuid}"
+                            if user_uuid
+                            else f"token_{refresh_token[:12]}"
+                        )
+                    )
+                    await self.async_set_unique_id(account_label.lower())
+                    self._abort_if_unique_id_configured()
+                    return self.async_create_entry(
+                        title=account_label,
+                        data={
+                            CONF_EMAIL: email or str(auth_data.get("email") or ""),
+                            CONF_PASSWORD: "",
+                            CONF_FF_ACCESS_TOKEN: auth_data["ffAccessToken"],
+                            CONF_WAPI_ACCESS_TOKEN: auth_data["wapiAccessToken"],
+                            CONF_REFRESH_TOKEN: auth_data.get(
+                                "refreshToken", refresh_token
+                            ),
+                            CONF_USER_UUID: user_uuid,
+                        },
+                    )
+            elif email and password:
+                # Check if already configured
+                await self.async_set_unique_id(email.lower())
+                self._abort_if_unique_id_configured()
+
+                try:
+                    auth_data = await api.login(email, password)
+                except OTPRequiredError:
+                    # Store credentials temporarily for the MFA step
+                    self._email = email
+                    self._password = password
+                    return await self.async_step_mfa()
+                except InvalidAuthError:
+                    errors["base"] = "invalid_auth"
+                except CannotConnectError:
+                    errors["base"] = "cannot_connect"
+                except FinanzflussAPIError:
+                    errors["base"] = "unknown"
+                else:
+                    return self.async_create_entry(
+                        title=email,
+                        data={
+                            CONF_EMAIL: email,
+                            CONF_PASSWORD: password,
+                            CONF_FF_ACCESS_TOKEN: auth_data["ffAccessToken"],
+                            CONF_WAPI_ACCESS_TOKEN: auth_data["wapiAccessToken"],
+                            CONF_REFRESH_TOKEN: auth_data["refreshToken"],
+                            CONF_USER_UUID: auth_data["uuid"],
+                        },
+                    )
             else:
-                return self.async_create_entry(
-                    title=email,
-                    data={
-                        CONF_EMAIL: email,
-                        CONF_PASSWORD: password,
-                        CONF_FF_ACCESS_TOKEN: auth_data["ffAccessToken"],
-                        CONF_WAPI_ACCESS_TOKEN: auth_data["wapiAccessToken"],
-                        CONF_REFRESH_TOKEN: auth_data["refreshToken"],
-                        CONF_USER_UUID: auth_data["uuid"],
-                    },
-                )
+                errors["base"] = "missing_credentials"
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_EMAIL): str,
-                    vol.Required(CONF_PASSWORD): str,
+                    vol.Optional(CONF_EMAIL): str,
+                    vol.Optional(CONF_PASSWORD): str,
+                    vol.Optional(CONF_REFRESH_TOKEN): str,
                 }
             ),
             errors=errors,

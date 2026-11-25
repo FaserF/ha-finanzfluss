@@ -156,3 +156,49 @@ class TestConfigFlow:
         )
         assert result["type"] == FlowResultType.FORM
         assert "invalid_otp" in result.get("errors", {}).values()
+
+    async def test_successful_login_with_refresh_token_oauth(
+        self, hass, mock_api_class
+    ):
+        """OAuth/SSO users can authenticate with a refresh token."""
+        oauth_data = {**AUTH_DATA, "email": "oauth@example.com"}
+        mock_api_class.refresh_tokens.return_value = oauth_data
+
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {"refresh_token": "sso-refresh-token-123"},
+        )
+        mock_api_class.refresh_tokens.assert_awaited_once_with("sso-refresh-token-123")
+        assert result["type"] in (FlowResultType.CREATE_ENTRY, FlowResultType.FORM)
+        if result["type"] == FlowResultType.CREATE_ENTRY:
+            assert result["data"]["refresh_token"] == "refresh_token"
+            assert result["data"]["ff_access_token"] == "ff_token"
+
+    async def test_missing_credentials_shows_error(self, hass, mock_api_class):
+        """Submitting neither credentials nor refresh token shows missing_credentials."""
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {},
+        )
+        assert result["type"] == FlowResultType.FORM
+        assert result.get("errors", {}).get("base") == "missing_credentials"
+
+    async def test_invalid_refresh_token_shows_error(self, hass, mock_api_class):
+        """Invalid refresh token shows 'invalid_auth' error."""
+        mock_api_class.refresh_tokens.side_effect = InvalidAuthError("bad token")
+
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {"refresh_token": "expired-token"},
+        )
+        assert result["type"] == FlowResultType.FORM
+        assert result.get("errors", {}).get("base") == "invalid_auth"

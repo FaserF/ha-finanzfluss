@@ -3,10 +3,11 @@
     "step": {
       "user": {
         "title": "Connect to Finanzfluss",
-        "description": "Please enter your Finanzfluss credentials. Your password will be encrypted.",
+        "description": "Enter your email and password, or provide a Refresh Token (required for Google/Apple SSO logins).",
         "data": {
           "email": "Email",
-          "password": "Password"
+          "password": "Password",
+          "refresh_token": "Refresh Token (for Google/Apple login)"
         }
       },
       "mfa": {
@@ -19,8 +20,9 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to the server",
-      "invalid_auth": "Invalid email or password",
+      "invalid_auth": "Invalid email, password, or refresh token",
       "invalid_otp": "Invalid 2FA code",
+      "missing_credentials": "Please provide either email and password or a refresh token",
       "unknown": "An unexpected error occurred"
     },
     "abort": {
