@@ -12,8 +12,8 @@ from .const import DOMAIN
 
 TO_REDACT = {
     "password",
-    "ff_access_token",
-    "wapi_access_token",
+    "REDACTED_SECRET_98316",
+    "REDACTED_SECRET_23490",
     "access_token",
     "refresh_token",
     "authorization",
